@@ -1,7 +1,20 @@
 import 'package:flutter/material.dart';
 
-class PairingStartPage extends StatelessWidget {
-  const PairingStartPage({super.key});
+class PairingStartPage extends StatefulWidget {
+  const PairingStartPage({
+    required this.onPairingPayloadSubmitted,
+    super.key,
+  });
+
+  final Future<void> Function(String pairingPayload) onPairingPayloadSubmitted;
+
+  @override
+  State<PairingStartPage> createState() => _PairingStartPageState();
+}
+
+class _PairingStartPageState extends State<PairingStartPage> {
+  bool _isPairing = false;
+  String? _errorText;
 
   @override
   Widget build(BuildContext context) {
@@ -11,10 +24,12 @@ class PairingStartPage extends StatelessWidget {
       TargetPlatform.fuchsia ||
       TargetPlatform.linux ||
       TargetPlatform.macOS ||
-      TargetPlatform.windows => false,
+      TargetPlatform.windows =>
+        false,
     };
     final buttonLabel = isMobile ? '扫码配对' : '输入配对字符串';
     final buttonIcon = isMobile ? Icons.qr_code_scanner : Icons.link;
+    final errorText = _errorText;
 
     return Scaffold(
       body: SafeArea(
@@ -57,16 +72,110 @@ class PairingStartPage extends StatelessWidget {
                   const SizedBox(height: 32),
                   ElevatedButton.icon(
                     key: const Key('pairing-action-button'),
-                    onPressed: null,
-                    icon: Icon(buttonIcon),
-                    label: Text(buttonLabel),
+                    onPressed: _isPairing
+                        ? null
+                        : () => isMobile
+                            ? _showScannerUnavailable(context)
+                            : _handlePairButtonPressed(context),
+                    icon: _isPairing
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(buttonIcon),
+                    label: Text(_isPairing ? '配对中…' : buttonLabel),
                   ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      errorText,
+                      key: const Key('pairing-error-text'),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  void _showScannerUnavailable(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('扫码配对将在接入摄像头后启用')),
+    );
+  }
+
+  Future<void> _handlePairButtonPressed(BuildContext context) async {
+    final payload = await showDialog<String>(
+      context: context,
+      builder: (context) => const _PairingPayloadDialog(),
+    );
+    if (payload == null || payload.trim().isEmpty) return;
+
+    setState(() {
+      _isPairing = true;
+      _errorText = null;
+    });
+
+    try {
+      await widget.onPairingPayloadSubmitted(payload.trim());
+    } on Exception catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isPairing = false;
+        _errorText = error.toString();
+      });
+    }
+  }
+}
+
+class _PairingPayloadDialog extends StatefulWidget {
+  const _PairingPayloadDialog();
+
+  @override
+  State<_PairingPayloadDialog> createState() => _PairingPayloadDialogState();
+}
+
+class _PairingPayloadDialogState extends State<_PairingPayloadDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('输入配对字符串'),
+      content: TextField(
+        key: const Key('pairing-payload-field'),
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: '配对字符串',
+          helperText: '粘贴 /remote-control-pair 显示的 hex payload',
+        ),
+        minLines: 1,
+        maxLines: 4,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('配对'),
+        ),
+      ],
     );
   }
 }
