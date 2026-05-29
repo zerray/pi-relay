@@ -67,6 +67,24 @@ void main() {
     expect(find.text('It is a Flutter client.'), findsOneWidget);
   });
 
+  testWidgets('starts at the newest variable-height message', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: _variableHeightMessages(),
+          isLoading: false,
+          errorText: null,
+          onBack: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+        find.textContaining('Newest variable-height message'), findsOneWidget);
+  });
+
   testWidgets('starts at the newest message and can jump back to bottom',
       (tester) async {
     await tester.pumpWidget(
@@ -143,6 +161,21 @@ void main() {
 
     expect(find.text('snapshot fetch failed'), findsOneWidget);
   });
+}
+
+List<TranscriptMessage> _variableHeightMessages() {
+  return List.generate(
+    80,
+    (index) => TranscriptMessage(
+      id: 'variable_msg_$index',
+      role: index.isEven ? 'user' : 'assistant',
+      text: index == 79
+          ? 'Newest variable-height message'
+          : 'Message $index ${'with extra text ' * (index % 9)}',
+      createdAt: DateTime.utc(2026, 5, 9, 9).add(Duration(minutes: index)),
+      isStreaming: false,
+    ),
+  );
 }
 
 List<TranscriptMessage> _manyMessages() {

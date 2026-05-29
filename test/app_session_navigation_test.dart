@@ -172,6 +172,58 @@ void main() {
     expect(find.text('It is a Flutter client.'), findsOneWidget);
   });
 
+  testWidgets('opens a long session transcript at the latest message',
+      (tester) async {
+    final session = RemoteSession(
+      id: 'sess_1',
+      piSessionId: 'pi_sess_1',
+      projectId: 'proj_1',
+      name: 'Refactor auth module',
+      path: '/repo/session.jsonl',
+      updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+      messageCount: 80,
+      isActive: true,
+    );
+    final snapshotService = _FakeSessionSnapshotService(
+      snapshot: SessionSnapshot(
+        session: session,
+        messages: List.generate(
+          80,
+          (index) => TranscriptMessage(
+            id: 'msg_$index',
+            role: index.isEven ? 'user' : 'assistant',
+            text: 'Transcript message $index',
+            createdAt: DateTime.utc(2026, 5, 9, 9).add(
+              Duration(minutes: index),
+            ),
+            isStreaming: false,
+          ),
+        ),
+        olderMessagesCursor: 'cursor_1',
+        hasOlderMessages: true,
+        isStreaming: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(sessions: [session]),
+        sessionSnapshotService: snapshotService,
+        pairingStore: _FakePairingStore(),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('pi-relay'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refactor auth module'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Transcript message 79'), findsOneWidget);
+  });
+
   testWidgets('loads older transcript messages by pulling down',
       (tester) async {
     final session = RemoteSession(

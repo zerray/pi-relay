@@ -146,9 +146,27 @@ class _SessionConversationPageState extends State<SessionConversationPage> {
   }
 
   void _scheduleScrollToBottom() {
+    _scrollToBottomAfterLayout(remainingAttempts: 8, previousMaxExtent: null);
+  }
+
+  void _scrollToBottomAfterLayout({
+    required int remainingAttempts,
+    required double? previousMaxExtent,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
+
+      final maxExtent = _scrollController.position.maxScrollExtent;
       _scrollToBottom();
+
+      if (remainingAttempts <= 1) return;
+      if (previousMaxExtent == null ||
+          (maxExtent - previousMaxExtent).abs() > 1) {
+        _scrollToBottomAfterLayout(
+          remainingAttempts: remainingAttempts - 1,
+          previousMaxExtent: maxExtent,
+        );
+      }
     });
   }
 
