@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pi_relay/app/pi_relay_app.dart';
 import 'package:pi_relay/application/pairing/pairing_service.dart';
+import 'package:pi_relay/application/projects/project_list_service.dart';
 import 'package:pi_relay/application/sessions/session_list_service.dart';
 import 'package:pi_relay/domain/projects/remote_project.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
@@ -50,6 +51,86 @@ void main() {
 
     expect(find.text('Refactor auth module'), findsOneWidget);
     expect(find.text('42 messages · active'), findsOneWidget);
+  });
+
+  testWidgets('refreshes projects from the paired daemon', (tester) async {
+    final projectListService = _FakeProjectListService(
+      projects: const [
+        RemoteProject(
+          id: 'proj_2',
+          name: 'pi-remote-control',
+          path: '/repo/pi-remote-control',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        projectListService: projectListService,
+        sessionListService: _FakeSessionListService(),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.drag(find.text('pi-relay'), const Offset(0, 400));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(
+        projectListService.fetchedBaseUrl.toString(), 'https://daemon.example');
+    expect(projectListService.fetchedToken, 'token_1');
+    expect(find.text('pi-remote-control'), findsOneWidget);
+  });
+
+  testWidgets('refreshes sessions for the selected project', (tester) async {
+    final sessionListService = _FakeSessionListService(
+      sessions: [
+        RemoteSession(
+          id: 'sess_2',
+          piSessionId: 'pi_sess_2',
+          projectId: 'proj_1',
+          name: 'Investigate pairing',
+          path: '/repo/session-2.jsonl',
+          updatedAt: DateTime.utc(2026, 5, 9, 9, 48),
+          messageCount: 7,
+          isActive: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: sessionListService,
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('pi-relay'));
+    await tester.pumpAndSettle();
+    expect(find.text('Investigate pairing'), findsOneWidget);
+
+    sessionListService.sessions = [
+      RemoteSession(
+        id: 'sess_3',
+        piSessionId: 'pi_sess_3',
+        projectId: 'proj_1',
+        name: 'Review session list',
+        path: '/repo/session-3.jsonl',
+        updatedAt: DateTime.utc(2026, 5, 9, 9, 49),
+        messageCount: 9,
+        isActive: true,
+      ),
+    ];
+
+    await tester.drag(find.text('Investigate pairing'), const Offset(0, 400));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Review session list'), findsOneWidget);
   });
 
   testWidgets('shows session load failures and can return to projects',
@@ -100,6 +181,25 @@ class _FakePairingService implements PairingService {
   }
 }
 
+class _FakeProjectListService implements ProjectListService {
+  _FakeProjectListService({this.projects = const []});
+
+  final List<RemoteProject> projects;
+
+  Uri? fetchedBaseUrl;
+  String? fetchedToken;
+
+  @override
+  Future<List<RemoteProject>> fetchProjects({
+    required Uri baseUrl,
+    required String token,
+  }) async {
+    fetchedBaseUrl = baseUrl;
+    fetchedToken = token;
+    return projects;
+  }
+}
+
 class _FakeSessionListService implements SessionListService {
   _FakeSessionListService({
     this.sessions = const [],
@@ -107,7 +207,7 @@ class _FakeSessionListService implements SessionListService {
     this.sessionsCompleter,
   });
 
-  final List<RemoteSession> sessions;
+  List<RemoteSession> sessions;
   final Object? error;
   final Completer<List<RemoteSession>>? sessionsCompleter;
 

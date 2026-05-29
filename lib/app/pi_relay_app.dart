@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../application/pairing/daemon_pairing_service.dart';
 import '../application/pairing/pairing_service.dart';
+import '../application/projects/daemon_project_list_service.dart';
+import '../application/projects/project_list_service.dart';
 import '../application/sessions/daemon_session_list_service.dart';
 import '../application/sessions/session_list_service.dart';
 import '../domain/projects/remote_project.dart';
@@ -13,13 +15,16 @@ import '../presentation/sessions/sessions_page.dart';
 class PiRelayApp extends StatefulWidget {
   PiRelayApp({
     PairingService? pairingService,
+    ProjectListService? projectListService,
     SessionListService? sessionListService,
     this.platform,
     super.key,
   })  : pairingService = pairingService ?? DaemonPairingService(),
+        projectListService = projectListService ?? DaemonProjectListService(),
         sessionListService = sessionListService ?? DaemonSessionListService();
 
   final PairingService pairingService;
+  final ProjectListService projectListService;
   final SessionListService sessionListService;
   final TargetPlatform? platform;
 
@@ -62,6 +67,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         isLoading: _isLoadingSessions,
         errorText: _sessionErrorText,
         onBack: _closeSessions,
+        onRefresh: _refreshSessions,
       );
     }
 
@@ -69,6 +75,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       daemonName: pairingResult.daemonName,
       projects: pairingResult.projects,
       onProjectSelected: _openProject,
+      onRefresh: _refreshProjects,
     );
   }
 
@@ -78,6 +85,35 @@ class _PiRelayAppState extends State<PiRelayApp> {
     setState(() {
       _pairingResult = result;
     });
+  }
+
+  Future<void> _refreshProjects() async {
+    final pairingResult = _pairingResult;
+    if (pairingResult == null) return;
+
+    try {
+      final projects = await widget.projectListService.fetchProjects(
+        baseUrl: pairingResult.baseUrl,
+        token: pairingResult.token,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pairingResult = PairingResult(
+          daemonName: pairingResult.daemonName,
+          baseUrl: pairingResult.baseUrl,
+          token: pairingResult.token,
+          projects: projects,
+        );
+      });
+    } on Exception {
+      return;
+    }
+  }
+
+  Future<void> _refreshSessions() async {
+    final selectedProject = _selectedProject;
+    if (selectedProject == null) return;
+    await _loadSessions(selectedProject, showLoading: false);
   }
 
   Future<void> _openProject(RemoteProject project) async {
@@ -91,6 +127,23 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _sessionErrorText = null;
     });
 
+    await _loadSessions(project, showLoading: true);
+  }
+
+  Future<void> _loadSessions(
+    RemoteProject project, {
+    required bool showLoading,
+  }) async {
+    final pairingResult = _pairingResult;
+    if (pairingResult == null) return;
+
+    if (showLoading) {
+      setState(() {
+        _isLoadingSessions = true;
+        _sessionErrorText = null;
+      });
+    }
+
     try {
       final sessions = await widget.sessionListService.fetchSessions(
         baseUrl: pairingResult.baseUrl,
@@ -101,6 +154,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       setState(() {
         _sessions = sessions;
         _isLoadingSessions = false;
+        _sessionErrorText = null;
       });
     } on Exception catch (error) {
       if (!mounted || _selectedProject?.id != project.id) return;

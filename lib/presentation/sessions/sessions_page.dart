@@ -10,6 +10,7 @@ class SessionsPage extends StatelessWidget {
     required this.isLoading,
     required this.errorText,
     required this.onBack,
+    required this.onRefresh,
     super.key,
   });
 
@@ -18,6 +19,7 @@ class SessionsPage extends StatelessWidget {
   final bool isLoading;
   final String? errorText;
   final VoidCallback onBack;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -39,29 +41,56 @@ class SessionsPage extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: _buildRefreshableContent(context),
+    );
+  }
+
+  Widget _buildRefreshableContent(BuildContext context) {
     final errorText = this.errorText;
     if (errorText != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            errorText,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.6,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  errorText,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                 ),
+              ),
+            ),
           ),
-        ),
+        ],
       );
     }
 
     if (sessions.isEmpty) {
-      return Center(
-        child: Text('暂无会话', style: Theme.of(context).textTheme.titleMedium),
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.6,
+            child: Center(
+              child: Text(
+                '暂无会话',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ),
+        ],
       );
     }
 
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       itemCount: sessions.length,
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
@@ -70,7 +99,10 @@ class SessionsPage extends StatelessWidget {
           leading: Icon(
             session.isActive ? Icons.terminal : Icons.terminal_outlined,
           ),
-          title: Text(session.name),
+          title: Text(
+            session.name,
+            key: Key('session-name-${session.id}'),
+          ),
           subtitle: Text(
             '${session.messageCount} messages · ${session.isActive ? 'active' : 'inactive'}',
           ),

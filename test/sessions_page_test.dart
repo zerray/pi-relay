@@ -17,6 +17,7 @@ void main() {
           isLoading: true,
           errorText: null,
           onBack: () {},
+          onRefresh: () async {},
         ),
       ),
     );
@@ -25,7 +26,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
-  testWidgets('shows sessions for a project', (tester) async {
+  testWidgets('shows session.name prominently for a project', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: SessionsPage(
@@ -45,12 +46,50 @@ void main() {
           isLoading: false,
           errorText: null,
           onBack: () {},
+          onRefresh: () async {},
         ),
       ),
     );
 
+    expect(find.byKey(const Key('session-name-sess_1')), findsOneWidget);
     expect(find.text('Refactor auth module'), findsOneWidget);
     expect(find.text('42 messages · active'), findsOneWidget);
+  });
+
+  testWidgets('refreshes the session list', (tester) async {
+    var refreshCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionsPage(
+          project: project,
+          sessions: [
+            RemoteSession(
+              id: 'sess_1',
+              piSessionId: 'pi_sess_1',
+              projectId: 'proj_1',
+              name: 'Refactor auth module',
+              path: '/repo/session.jsonl',
+              updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+              messageCount: 42,
+              isActive: true,
+            ),
+          ],
+          isLoading: false,
+          errorText: null,
+          onBack: () {},
+          onRefresh: () async {
+            refreshCount += 1;
+          },
+        ),
+      ),
+    );
+
+    await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(refreshCount, 1);
   });
 
   testWidgets('shows empty and error states', (tester) async {
@@ -62,6 +101,7 @@ void main() {
           isLoading: false,
           errorText: 'session fetch failed',
           onBack: () {},
+          onRefresh: () async {},
         ),
       ),
     );
