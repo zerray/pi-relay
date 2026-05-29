@@ -354,59 +354,255 @@ class _ActivityTranscriptRow extends _TranscriptRow {
   final List<_ActivityDetailItem> items;
 }
 
+class _NormalizedTranscriptItem {
+  const _NormalizedTranscriptItem({
+    required this.id,
+    required this.kind,
+    required this.text,
+    required this.createdAt,
+    required this.isStreaming,
+    this.toolCallId,
+    this.toolName,
+    this.summary,
+    this.arguments,
+    this.isTruncated = false,
+    this.originalBytes,
+  });
+
+  final String id;
+  final String kind;
+  final String text;
+  final DateTime createdAt;
+  final bool isStreaming;
+  final String? toolCallId;
+  final String? toolName;
+  final String? summary;
+  final Object? arguments;
+  final bool isTruncated;
+  final int? originalBytes;
+}
+
 class _TranscriptRows {
   static List<_TranscriptRow> fromMessages(List<TranscriptMessage> messages) {
+    final items = messages.expand(_itemsFromMessage).toList(growable: false);
     final rows = <_TranscriptRow>[];
     var index = 0;
-    while (index < messages.length) {
-      final message = messages[index];
-      if (_isActivityMessage(message)) {
-        final activityMessages = <TranscriptMessage>[];
-        while (index < messages.length && _isActivityMessage(messages[index])) {
-          activityMessages.add(messages[index]);
+    while (index < items.length) {
+      final item = items[index];
+      if (_isActivityItem(item)) {
+        final activityItems = <_NormalizedTranscriptItem>[];
+        while (index < items.length && _isActivityItem(items[index])) {
+          activityItems.add(items[index]);
           index += 1;
         }
-        rows.add(_activityRow(activityMessages));
+        rows.add(_activityRow(activityItems));
         continue;
       }
 
       rows.add(_TextTranscriptRow(
-        id: message.id,
-        text: _textWithPreviewNotice(message),
-        style: _styleFor(message),
+        id: item.id,
+        text: _textWithPreviewNotice(item),
+        style: _styleFor(item),
       ));
       index += 1;
     }
     return rows;
   }
 
-  static bool _isActivityMessage(TranscriptMessage message) {
-    return message.kind == 'thinking' ||
-        message.kind == 'toolCall' ||
-        message.kind == 'toolResult' ||
-        message.role == 'toolResult';
+  static Iterable<_NormalizedTranscriptItem> _itemsFromMessage(
+    TranscriptMessage message,
+  ) {
+    final normalizedKind = _normalizedKind(message);
+    if (normalizedKind != null) {
+      return [
+        _NormalizedTranscriptItem(
+          id: message.id,
+          kind: normalizedKind,
+          text: message.text,
+          createdAt: message.createdAt,
+          isStreaming: message.isStreaming,
+          toolCallId: message.toolCallId,
+          toolName: message.toolName,
+          summary: message.summary,
+          arguments: message.arguments,
+          isTruncated: message.isTruncated,
+          originalBytes: message.originalBytes,
+        ),
+      ];
+    }
+
+    if (message.role == 'assistant') {
+      final blockItems = _assistantItems(message);
+      if (blockItems.isNotEmpty) return blockItems;
+      if (message.text.isEmpty) return const [];
+      return [
+        _NormalizedTranscriptItem(
+          id: message.id,
+          kind: 'assistantText',
+          text: message.text,
+          createdAt: message.createdAt,
+          isStreaming: message.isStreaming,
+          isTruncated: message.isTruncated,
+          originalBytes: message.originalBytes,
+        ),
+      ];
+    }
+
+    if (message.role == 'user') {
+      if (message.text.isEmpty) return const [];
+      return [
+        _NormalizedTranscriptItem(
+          id: message.id,
+          kind: 'userText',
+          text: message.text,
+          createdAt: message.createdAt,
+          isStreaming: message.isStreaming,
+          isTruncated: message.isTruncated,
+          originalBytes: message.originalBytes,
+        ),
+      ];
+    }
+
+    if (message.role == 'toolResult') {
+      return [
+        _NormalizedTranscriptItem(
+          id: message.id,
+          kind: 'toolResult',
+          text: message.text,
+          createdAt: message.createdAt,
+          isStreaming: message.isStreaming,
+          toolCallId: message.toolCallId,
+          toolName: message.toolName,
+          isTruncated: message.isTruncated,
+          originalBytes: message.originalBytes,
+        ),
+      ];
+    }
+
+    if (message.role == 'system') {
+      if (message.text.isEmpty) return const [];
+      return [
+        _NormalizedTranscriptItem(
+          id: message.id,
+          kind: 'system',
+          text: message.text,
+          createdAt: message.createdAt,
+          isStreaming: message.isStreaming,
+          isTruncated: message.isTruncated,
+          originalBytes: message.originalBytes,
+        ),
+      ];
+    }
+
+    return const [];
   }
 
-  static _ActivityTranscriptRow _activityRow(List<TranscriptMessage> messages) {
-    final toolCalls = messages.where(_isToolCall).toList(growable: false);
-    final commandCount = toolCalls.where((message) {
-      return _toolName(message).toLowerCase() == 'bash';
+  static String? _normalizedKind(TranscriptMessage message) {
+    return switch (message.kind) {
+      'userText' ||
+      'assistantText' ||
+      'thinking' ||
+      'toolCall' ||
+      'toolResult' ||
+      'system' =>
+        message.kind,
+      _ => null,
+    };
+  }
+
+  static List<_NormalizedTranscriptItem> _assistantItems(
+    TranscriptMessage message,
+  ) {
+    final items = <_NormalizedTranscriptItem>[];
+    for (var index = 0; index < message.content.length; index += 1) {
+      final block = message.content[index];
+      if (block is! Map) continue;
+      final type = block['type'];
+      final createdAt = message.createdAt.add(Duration(milliseconds: index));
+      if (type == 'text') {
+        final text = block['text'];
+        if (text is! String || text.isEmpty) continue;
+        items.add(
+          _NormalizedTranscriptItem(
+            id: message.content.length == 1
+                ? message.id
+                : _assistantBlockItemId(message.id, 'text', index),
+            kind: 'assistantText',
+            text: text,
+            createdAt: createdAt,
+            isStreaming: message.isStreaming,
+            isTruncated: _boolValue(block['truncated']) || message.isTruncated,
+            originalBytes:
+                _intValue(block['originalBytes']) ?? message.originalBytes,
+          ),
+        );
+      } else if (type == 'thinking') {
+        final thinking = block['thinking'];
+        if (thinking is! String || thinking.isEmpty) continue;
+        items.add(
+          _NormalizedTranscriptItem(
+            id: _assistantBlockItemId(message.id, 'thinking', index),
+            kind: 'thinking',
+            text: thinking,
+            createdAt: createdAt,
+            isStreaming: message.isStreaming,
+            isTruncated: _boolValue(block['truncated']),
+            originalBytes: _intValue(block['originalBytes']),
+          ),
+        );
+      } else if (type == 'toolCall') {
+        final id = block['id'];
+        final name = block['name'];
+        if (id is! String || name is! String) continue;
+        final arguments = block['arguments'];
+        items.add(
+          _NormalizedTranscriptItem(
+            id: _assistantBlockItemId(message.id, 'tool', index),
+            kind: 'toolCall',
+            text: name,
+            createdAt: createdAt,
+            isStreaming: message.isStreaming,
+            toolCallId: id,
+            toolName: name,
+            summary: _summarizeToolArguments(name, arguments),
+            arguments: arguments,
+            isTruncated: _boolValue(block['argumentsTruncated']),
+            originalBytes: _intValue(block['argumentsOriginalBytes']),
+          ),
+        );
+      }
+    }
+    return items;
+  }
+
+  static bool _isActivityItem(_NormalizedTranscriptItem item) {
+    return item.kind == 'thinking' ||
+        item.kind == 'toolCall' ||
+        item.kind == 'toolResult';
+  }
+
+  static _ActivityTranscriptRow _activityRow(
+    List<_NormalizedTranscriptItem> items,
+  ) {
+    final toolCalls = items.where(_isToolCall).toList(growable: false);
+    final commandCount = toolCalls.where((item) {
+      return _toolName(item).toLowerCase() == 'bash';
     }).length;
     final toolCount = toolCalls.length - commandCount;
     final title = _activityTitle(
       commandCount: commandCount,
       toolCount: toolCount,
-      hasThinking: messages.any((message) => message.kind == 'thinking'),
+      hasThinking: items.any((item) => item.kind == 'thinking'),
     );
     return _ActivityTranscriptRow(
-      id: messages.last.id,
+      id: items.last.id,
       title: title,
-      items: _activityItems(messages),
+      items: _activityItems(items),
     );
   }
 
-  static bool _isToolCall(TranscriptMessage message) {
-    return message.kind == 'toolCall';
+  static bool _isToolCall(_NormalizedTranscriptItem item) {
+    return item.kind == 'toolCall';
   }
 
   static String _activityTitle({
@@ -430,42 +626,41 @@ class _TranscriptRows {
   }
 
   static List<_ActivityDetailItem> _activityItems(
-    List<TranscriptMessage> messages,
+    List<_NormalizedTranscriptItem> items,
   ) {
-    final resultMessagesByToolCallId = <String, List<TranscriptMessage>>{};
-    for (final message in messages) {
-      if ((message.kind == 'toolResult' || message.role == 'toolResult') &&
-          message.toolCallId != null) {
+    final resultMessagesByToolCallId =
+        <String, List<_NormalizedTranscriptItem>>{};
+    for (final item in items) {
+      if (item.kind == 'toolResult' && item.toolCallId != null) {
         resultMessagesByToolCallId
-            .putIfAbsent(message.toolCallId!, () => [])
-            .add(message);
+            .putIfAbsent(item.toolCallId!, () => [])
+            .add(item);
       }
     }
 
-    return messages
-        .where((message) =>
-            message.kind == 'thinking' ||
-            message.kind == 'toolCall' ||
-            ((message.kind == 'toolResult' || message.role == 'toolResult') &&
-                message.toolCallId == null))
-        .map((message) {
-      if (message.kind == 'thinking') {
-        final body = _textWithPreviewNotice(message);
+    return items
+        .where((item) =>
+            item.kind == 'thinking' ||
+            item.kind == 'toolCall' ||
+            (item.kind == 'toolResult' && item.toolCallId == null))
+        .map((item) {
+      if (item.kind == 'thinking') {
+        final body = _textWithPreviewNotice(item);
         return _ActivityDetailItem(
-          id: message.id,
+          id: item.id,
           title: 'Thinking',
           icon: Icons.psychology_outlined,
           body: body,
           sections: [_ActivityDetailSection(title: 'Thinking', body: body)],
         );
       }
-      if (message.kind == 'toolCall') {
-        final results = resultMessagesByToolCallId[message.toolCallId] ?? [];
-        return _toolDetailItem(message, results);
+      if (item.kind == 'toolCall') {
+        final results = resultMessagesByToolCallId[item.toolCallId] ?? [];
+        return _toolDetailItem(item, results);
       }
-      final body = _textWithPreviewNotice(message);
+      final body = _textWithPreviewNotice(item);
       return _ActivityDetailItem(
-        id: message.id,
+        id: item.id,
         title: 'Tool result',
         icon: Icons.handyman_outlined,
         body: body,
@@ -475,10 +670,10 @@ class _TranscriptRows {
   }
 
   static _ActivityDetailItem _toolDetailItem(
-    TranscriptMessage message,
-    List<TranscriptMessage> results,
+    _NormalizedTranscriptItem item,
+    List<_NormalizedTranscriptItem> results,
   ) {
-    final toolName = _toolName(message);
+    final toolName = _toolName(item);
     final title = _displayToolName(toolName);
     final resultText = results
         .map(_textWithPreviewNotice)
@@ -486,14 +681,14 @@ class _TranscriptRows {
         .join('\n');
     final sections = _toolDetailSections(
       toolName: toolName,
-      arguments: message.arguments,
-      summary: message.summary,
+      arguments: item.arguments,
+      summary: item.summary,
       resultText: resultText,
     );
     return _ActivityDetailItem(
-      id: message.id,
+      id: item.id,
       title: title,
-      subtitle: _toolSubtitle(toolName, message.arguments, message.summary),
+      subtitle: _toolSubtitle(toolName, item.arguments, item.summary),
       icon: _toolIcon(toolName),
       body: sections.map((section) => section.body).join('\n'),
       sections: sections.isEmpty
@@ -570,28 +765,38 @@ class _TranscriptRows {
     return sections;
   }
 
-  static _TextTranscriptRowStyle _styleFor(TranscriptMessage message) {
-    if (message.kind == 'userText' || message.role == 'user') {
-      return _TextTranscriptRowStyle.user;
-    }
-    if (message.role == 'system' || message.kind == 'system') {
-      return _TextTranscriptRowStyle.muted;
-    }
+  static _TextTranscriptRowStyle _styleFor(_NormalizedTranscriptItem item) {
+    if (item.kind == 'userText') return _TextTranscriptRowStyle.user;
+    if (item.kind == 'system') return _TextTranscriptRowStyle.muted;
     return _TextTranscriptRowStyle.assistant;
   }
 
-  static String _textWithPreviewNotice(TranscriptMessage message) {
-    if (!message.isTruncated) return message.text;
-    final notice = message.originalBytes == null
+  static String _textWithPreviewNotice(_NormalizedTranscriptItem item) {
+    if (!item.isTruncated) return item.text;
+    final notice = item.originalBytes == null
         ? 'Preview truncated.'
-        : 'Preview truncated from ${message.originalBytes} bytes.';
-    if (message.text.isEmpty) return notice;
-    return '${message.text}\n\n$notice';
+        : 'Preview truncated from ${item.originalBytes} bytes.';
+    if (item.text.isEmpty) return notice;
+    return '${item.text}\n\n$notice';
   }
 
-  static String _toolName(TranscriptMessage message) {
-    return _nonEmpty(message.toolName) ?? _nonEmpty(message.text) ?? 'tool';
+  static String _toolName(_NormalizedTranscriptItem item) {
+    return _nonEmpty(item.toolName) ?? _nonEmpty(item.text) ?? 'tool';
   }
+
+  static String _assistantBlockItemId(
+      String messageId, String blockKind, int index) {
+    return '$messageId-$blockKind-$index';
+  }
+
+  static String? _summarizeToolArguments(String toolName, Object? arguments) {
+    final key = toolName.toLowerCase() == 'bash' ? 'command' : 'path';
+    return _argumentString(arguments, key);
+  }
+
+  static bool _boolValue(Object? value) => value is bool && value;
+
+  static int? _intValue(Object? value) => value is int ? value : null;
 
   static String _displayToolName(String name) {
     if (name.toLowerCase() == 'bash') return 'Bash';

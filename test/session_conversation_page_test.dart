@@ -95,6 +95,62 @@ void main() {
     expect(find.byKey(const Key('markdown-code-block-0')), findsOneWidget);
   });
 
+  testWidgets('normalizes assistant content blocks before grouping activity',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: [
+            TranscriptMessage(
+              id: 'assistant_1',
+              role: 'assistant',
+              text: '',
+              createdAt: DateTime.utc(2026, 5, 9, 9, 46),
+              isStreaming: false,
+              content: [
+                {'type': 'thinking', 'thinking': 'Need inspect files'},
+                {
+                  'type': 'toolCall',
+                  'id': 'read_1',
+                  'name': 'read',
+                  'arguments': {'path': 'Sources/App.swift'},
+                },
+              ],
+            ),
+            TranscriptMessage(
+              id: 'result_1',
+              role: 'toolResult',
+              text: 'let app = App()',
+              createdAt: DateTime.utc(2026, 5, 9, 9, 47),
+              isStreaming: false,
+              toolCallId: 'read_1',
+            ),
+            TranscriptMessage(
+              id: 'assistant_2',
+              role: 'assistant',
+              text: 'Done',
+              createdAt: DateTime.utc(2026, 5, 9, 9, 48),
+              isStreaming: false,
+            ),
+          ],
+          isLoading: false,
+          errorText: null,
+          onBack: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Ran 1 tool'), findsOneWidget);
+    expect(find.text('Tool result'), findsNothing);
+    expect(find.text('Done'), findsOneWidget);
+
+    await tester.tap(find.text('Ran 1 tool'));
+    await tester.pumpAndSettle();
+    expect(find.text('Thinking'), findsOneWidget);
+    expect(find.text('Read'), findsOneWidget);
+  });
+
   testWidgets('groups activity messages and opens tool details',
       (tester) async {
     await tester.pumpWidget(

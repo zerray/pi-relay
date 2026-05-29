@@ -10,6 +10,7 @@ class TranscriptMessage {
     this.toolName,
     this.summary,
     this.arguments,
+    this.content = const [],
     this.isTruncated = false,
     this.originalBytes,
   });
@@ -24,6 +25,7 @@ class TranscriptMessage {
   final String? toolName;
   final String? summary;
   final Object? arguments;
+  final List<Object?> content;
   final bool isTruncated;
   final int? originalBytes;
 
@@ -84,6 +86,9 @@ class TranscriptMessage {
       toolName: toolName as String?,
       summary: summary as String?,
       arguments: json['arguments'],
+      content: json['content'] is List
+          ? (json['content'] as List).toList(growable: false)
+          : const [],
       isTruncated: isTruncated as bool? ?? false,
       originalBytes: originalBytes as int?,
     );
