@@ -181,6 +181,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       projects: pairingResult.projects,
       onProjectSelected: _openProject,
       onUnpair: _unpair,
+      onPairingPayloadSubmitted: _pair,
       onRefresh: _refreshProjects,
     );
   }

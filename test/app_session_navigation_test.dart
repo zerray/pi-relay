@@ -43,8 +43,9 @@ void main() {
     expect(
         projectListService.fetchedBaseUrl.toString(), 'https://daemon.example');
     expect(projectListService.fetchedToken, 'token_1');
+    expect(find.text('Projects'), findsOneWidget);
     expect(find.text('pi-relay'), findsOneWidget);
-    expect(find.text('输入配对字符串'), findsNothing);
+    expect(find.text('Pi Relay'), findsNothing);
   });
 
   testWidgets('saves pairing credentials after successful pairing',

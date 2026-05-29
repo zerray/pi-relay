@@ -9,6 +9,7 @@ class ProjectsPage extends StatelessWidget {
     required this.projects,
     required this.onProjectSelected,
     required this.onUnpair,
+    required this.onPairingPayloadSubmitted,
     required this.onRefresh,
     super.key,
   });
@@ -18,6 +19,7 @@ class ProjectsPage extends StatelessWidget {
   final List<RemoteProject> projects;
   final ValueChanged<RemoteProject> onProjectSelected;
   final Future<void> Function() onUnpair;
+  final Future<void> Function(String pairingPayload) onPairingPayloadSubmitted;
   final Future<void> Function() onRefresh;
 
   @override
@@ -28,20 +30,27 @@ class ProjectsPage extends StatelessWidget {
         bottom: false,
         child: RefreshIndicator(
           onRefresh: onRefresh,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.zero,
-            children: [
-              _Header(onScanPairing: () {}),
-              _RemotesSection(
-                title: _daemonDisplayHost,
-                onUnpair: onUnpair,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 860),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 32),
+                children: [
+                  _Header(onPairingPayloadSubmitted: onPairingPayloadSubmitted),
+                  const SizedBox(height: 28),
+                  _RemotesSection(
+                    title: _daemonDisplayHost,
+                    onUnpair: onUnpair,
+                  ),
+                  const SizedBox(height: 28),
+                  _ProjectsSection(
+                    projects: projects,
+                    onProjectSelected: onProjectSelected,
+                  ),
+                ],
               ),
-              _ProjectsSection(
-                projects: projects,
-                onProjectSelected: onProjectSelected,
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -56,47 +65,42 @@ class ProjectsPage extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onScanPairing});
+  const _Header({required this.onPairingPayloadSubmitted});
 
-  final VoidCallback onScanPairing;
+  final Future<void> Function(String pairingPayload) onPairingPayloadSubmitted;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                tooltip: '扫码配对',
-                onPressed: onScanPairing,
-                icon: const Icon(Icons.qr_code_scanner),
-                style: IconButton.styleFrom(
-                  fixedSize: const Size(52, 52),
-                  backgroundColor: const Color(0xFFF7F7F9),
-                  foregroundColor: Colors.black,
-                  elevation: 10,
-                  shadowColor: Colors.black.withValues(alpha: 0.12),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Text(
+            'Projects',
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1.4,
                 ),
-              ),
-            ),
-            const SizedBox(height: 26),
-            Text(
-              'Projects',
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1.8,
-                  ),
-            ),
-          ],
+          ),
         ),
-      ),
+        FilledButton.tonalIcon(
+          key: const Key('project-list-pair-button'),
+          onPressed: () => _showPairingDialog(context),
+          icon: const Icon(Icons.link),
+          label: const Text('输入配对字符串'),
+        ),
+      ],
     );
+  }
+
+  Future<void> _showPairingDialog(BuildContext context) async {
+    final payload = await showDialog<String>(
+      context: context,
+      builder: (context) => const _PairingPayloadDialog(),
+    );
+    if (payload == null || payload.trim().isEmpty) return;
+    await onPairingPayloadSubmitted(payload.trim());
   }
 }
 
@@ -108,46 +112,29 @@ class _RemotesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'REMOTES',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Colors.black.withValues(alpha: 0.42),
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.2,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            PopupMenuButton<String>(
-              tooltip: '远程 daemon 操作',
-              position: PopupMenuPosition.under,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              elevation: 12,
-              onSelected: (_) => onUnpair(),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'unpair',
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 36, vertical: 10),
-                    child: Text(
-                      'Unpair',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ),
-              ],
-              child: _RemoteChip(title: title),
-            ),
-          ],
+    return _SectionCard(
+      title: 'REMOTES',
+      child: PopupMenuButton<String>(
+        tooltip: '远程 daemon 操作',
+        position: PopupMenuPosition.under,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
         ),
+        elevation: 12,
+        onSelected: (_) => onUnpair(),
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'unpair',
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 36, vertical: 10),
+              child: Text(
+                'Unpair',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ),
+        ],
+        child: _RemoteChip(title: title),
       ),
     );
   }
@@ -163,14 +150,14 @@ class _RemoteChip extends StatelessWidget {
     const accent = Color(0xFF2F80ED);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(26),
+        color: Colors.black.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(22),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
-            const Icon(Icons.check_circle, color: accent, size: 24),
+            const Icon(Icons.check_circle, color: accent, size: 23),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -200,45 +187,81 @@ class _ProjectsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (projects.isEmpty) {
-      return SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.48,
-        child: Center(
+    return _SectionCard(
+      title: 'PROJECTS',
+      child: projects.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 38),
+              child: Center(
+                child: Text(
+                  '暂无项目',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.black.withValues(alpha: 0.45),
+                      ),
+                ),
+              ),
+            )
+          : Column(
+              children: [
+                for (var index = 0; index < projects.length; index += 1) ...[
+                  _ProjectRow(
+                    project: projects[index],
+                    onTap: () => onProjectSelected(projects[index]),
+                  ),
+                  if (index != projects.length - 1)
+                    Divider(
+                      height: 1,
+                      indent: 20,
+                      endIndent: 20,
+                      color: Colors.black.withValues(alpha: 0.10),
+                    ),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 10),
           child: Text(
-            '暂无项目',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.black.withValues(alpha: 0.45),
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
                 ),
           ),
         ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 52, 24, 24),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: Column(
-          children: [
-            for (var index = 0; index < projects.length; index += 1) ...[
-              _ProjectRow(
-                project: projects[index],
-                onTap: () => onProjectSelected(projects[index]),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
-              if (index != projects.length - 1)
-                Divider(
-                  height: 1,
-                  indent: 24,
-                  endIndent: 24,
-                  color: Colors.black.withValues(alpha: 0.10),
-                ),
             ],
-          ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: child,
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -252,10 +275,10 @@ class _ProjectRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -277,6 +300,51 @@ class _ProjectRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PairingPayloadDialog extends StatefulWidget {
+  const _PairingPayloadDialog();
+
+  @override
+  State<_PairingPayloadDialog> createState() => _PairingPayloadDialogState();
+}
+
+class _PairingPayloadDialogState extends State<_PairingPayloadDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('输入配对字符串'),
+      content: TextField(
+        key: const Key('pairing-payload-field'),
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: '配对字符串',
+          helperText: '粘贴 /remote-control-pair 显示的 hex payload',
+        ),
+        minLines: 1,
+        maxLines: 4,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('配对'),
+        ),
+      ],
     );
   }
 }
