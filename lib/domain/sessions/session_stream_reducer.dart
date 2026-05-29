@@ -129,6 +129,10 @@ class SessionStreamReducer {
       forceStreaming ? _copyMessage(message, isStreaming: true) : message,
     );
     if (incoming.isEmpty) return model;
+    if (forceStreaming &&
+        !_shouldAcceptNewStreamingFragment(model.messages, message.id)) {
+      return model;
+    }
     return model.copyWith(
       messages: _mergeTranscriptMessages(
         existing: _removingReconciledMessages(
@@ -148,7 +152,10 @@ class SessionStreamReducer {
     required DateTime now,
   }) {
     return switch (patch) {
-      TextDeltaPatch(:final delta) when delta.isNotEmpty => model.copyWith(
+      TextDeltaPatch(:final delta)
+          when delta.isNotEmpty &&
+              _shouldAcceptNewStreamingFragment(model.messages, messageId) =>
+        model.copyWith(
           messages: _appendDelta(
             messages: model.messages,
             itemId: _assistantBlockItemId(
@@ -162,7 +169,10 @@ class SessionStreamReducer {
           ),
           isStreaming: true,
         ),
-      ThinkingDeltaPatch(:final delta) when delta.isNotEmpty => model.copyWith(
+      ThinkingDeltaPatch(:final delta)
+          when delta.isNotEmpty &&
+              _shouldAcceptNewStreamingFragment(model.messages, messageId) =>
+        model.copyWith(
           messages: _appendDelta(
             messages: model.messages,
             itemId: _assistantBlockItemId(
@@ -176,7 +186,9 @@ class SessionStreamReducer {
           ),
           isStreaming: true,
         ),
-      ToolCallPatch() => model.copyWith(
+      ToolCallPatch()
+          when _shouldAcceptNewStreamingFragment(model.messages, messageId) =>
+        model.copyWith(
           messages: _mergeTranscriptMessages(
             existing: model.messages,
             incoming: [_toolCallMessage(messageId, contentIndex, patch, now)],
@@ -318,6 +330,21 @@ List<TranscriptMessage> _messagesFromTranscriptMessage(
   }
 
   return const [];
+}
+
+bool _shouldAcceptNewStreamingFragment(
+  List<TranscriptMessage> messages,
+  String messageId,
+) {
+  final hasRelatedMessage = messages.any(
+    (message) =>
+        message.id == messageId || message.id.startsWith('$messageId-'),
+  );
+  if (hasRelatedMessage || messages.isEmpty) return true;
+
+  final lastMessage = messages.last;
+  return !(!lastMessage.isStreaming &&
+      _messageKind(lastMessage) == 'assistantText');
 }
 
 List<TranscriptMessage> _appendDelta({

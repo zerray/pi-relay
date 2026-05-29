@@ -4,6 +4,47 @@ import 'package:pi_relay/domain/sessions/session_stream_reducer.dart';
 import 'package:pi_relay/domain/transcript/transcript_message.dart';
 
 void main() {
+  test('ignores stale streaming assistant fragments after a finalized answer',
+      () {
+    final reducer = const SessionStreamReducer();
+    final now = DateTime.utc(2026, 5, 29, 7, 38);
+    final model = SessionStreamModel(
+      messages: [
+        TranscriptMessage(
+          id: 'msg_user',
+          role: 'user',
+          kind: 'userText',
+          text: 'hello from macos',
+          createdAt: now,
+          isStreaming: false,
+        ),
+        TranscriptMessage(
+          id: 'msg_answer',
+          role: 'assistant',
+          kind: 'assistantText',
+          text: '收到：`hello from macos`',
+          createdAt: now.add(const Duration(seconds: 1)),
+          isStreaming: false,
+        ),
+      ],
+    );
+
+    final reduced = reducer.reduce(
+      model,
+      const TranscriptMessagePatchEvent(
+        messageId: 'stale_tmp',
+        contentIndex: 0,
+        patch: TextDeltaPatch('hello'),
+      ),
+      now: now.add(const Duration(seconds: 2)),
+    );
+
+    expect(reduced.messages.map((message) => message.text), [
+      'hello from macos',
+      '收到：`hello from macos`',
+    ]);
+  });
+
   test('applies text deltas and reconciles the final transcript message', () {
     final reducer = const SessionStreamReducer();
     var model = const SessionStreamModel();
