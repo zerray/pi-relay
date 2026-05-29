@@ -70,6 +70,43 @@ void main() {
     expect(projects.single.name, 'pi-relay');
   });
 
+  test('fetches project sessions with bearer token', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    _serve(server, (request) async {
+      expect(request.method, 'GET');
+      expect(request.uri.path, '/v1/projects/proj_1/sessions');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer token_1');
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'sessions': [
+            {
+              'id': 'sess_1',
+              'piSessionId': 'pi_sess_1',
+              'projectId': 'proj_1',
+              'name': 'Refactor auth module',
+              'path': '/repo/session.jsonl',
+              'updatedAt': '2026-05-09T09:47:00.000Z',
+              'messageCount': 42,
+              'isActive': true,
+            },
+          ],
+        }));
+    });
+
+    final client = DaemonClient();
+    final sessions = await client.fetchSessions(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      token: 'token_1',
+      projectId: 'proj_1',
+    );
+
+    expect(sessions.single.id, 'sess_1');
+    expect(sessions.single.name, 'Refactor auth module');
+  });
+
   test('throws daemon client exception for non-success responses', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(server.close);

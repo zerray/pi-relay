@@ -6,11 +6,13 @@ class ProjectsPage extends StatelessWidget {
   const ProjectsPage({
     required this.daemonName,
     required this.projects,
+    required this.onProjectSelected,
     super.key,
   });
 
   final String daemonName;
   final List<RemoteProject> projects;
+  final ValueChanged<RemoteProject> onProjectSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,7 @@ class ProjectsPage extends StatelessWidget {
                   title: Text(project.name),
                   subtitle: Text(project.path),
                   leading: const Icon(Icons.folder_outlined),
+                  onTap: () => onProjectSelected(project),
                 );
               },
             ),

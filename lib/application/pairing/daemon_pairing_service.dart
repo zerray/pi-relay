@@ -27,7 +27,12 @@ class DaemonPairingService implements PairingService {
         token: claim.token,
       );
 
-      return PairingResult(daemonName: claim.daemonName, projects: projects);
+      return PairingResult(
+        daemonName: claim.daemonName,
+        baseUrl: link.baseUrl,
+        token: claim.token,
+        projects: projects,
+      );
     } on PairingLinkFormatException catch (error) {
       throw PairingFailure(error.message);
     } on DaemonClientException catch (error) {

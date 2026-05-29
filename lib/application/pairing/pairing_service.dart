@@ -7,10 +7,14 @@ abstract interface class PairingService {
 class PairingResult {
   const PairingResult({
     required this.daemonName,
+    required this.baseUrl,
+    required this.token,
     required this.projects,
   });
 
   final String daemonName;
+  final Uri baseUrl;
+  final String token;
   final List<RemoteProject> projects;
 }
 

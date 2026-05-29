@@ -59,9 +59,11 @@ void main() {
   testWidgets('desktop pairing submits payload and shows returned projects',
       (tester) async {
     final service = _FakePairingService(
-      result: const PairingResult(
+      result: PairingResult(
         daemonName: 'macbook-pro',
-        projects: [
+        baseUrl: Uri.parse('https://daemon.example'),
+        token: 'token_1',
+        projects: const [
           RemoteProject(
             id: 'proj_1',
             name: 'pi-relay',
@@ -114,9 +116,15 @@ void main() {
 
 class _FakePairingService implements PairingService {
   _FakePairingService({
-    this.result = const PairingResult(daemonName: 'daemon', projects: []),
+    PairingResult? result,
     this.error,
-  });
+  }) : result = result ??
+            PairingResult(
+              daemonName: 'daemon',
+              baseUrl: Uri.parse('https://daemon.example'),
+              token: 'token_1',
+              projects: const [],
+            );
 
   final PairingResult result;
   final Object? error;

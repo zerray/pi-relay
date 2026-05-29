@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../../domain/pairing/pairing_link.dart';
 import '../../domain/projects/remote_project.dart';
+import '../../domain/sessions/remote_session.dart';
 
 class PairClaimResult {
   const PairClaimResult({
@@ -76,6 +77,31 @@ class DaemonClient {
         throw const FormatException('Project entry is not an object.');
       }
       return RemoteProject.fromJson(projectJson);
+    }).toList(growable: false);
+  }
+
+  Future<List<RemoteSession>> fetchSessions({
+    required Uri baseUrl,
+    required String token,
+    required String projectId,
+  }) async {
+    final json = await _sendJson(
+      method: 'GET',
+      uri: baseUrl
+          .resolve('/v1/projects/${Uri.encodeComponent(projectId)}/sessions'),
+      bearerToken: token,
+    );
+
+    final sessionsJson = json['sessions'];
+    if (sessionsJson is! List) {
+      throw const FormatException('Sessions response is missing sessions.');
+    }
+
+    return sessionsJson.map((sessionJson) {
+      if (sessionJson is! Map<String, Object?>) {
+        throw const FormatException('Session entry is not an object.');
+      }
+      return RemoteSession.fromJson(sessionJson);
     }).toList(growable: false);
   }
 

@@ -32,6 +32,8 @@ void main() {
         'https://macbook.tailnet.ts.net:17373');
     expect(client.fetchedToken, 'token_1');
     expect(result.daemonName, 'macbook-pro');
+    expect(result.baseUrl.toString(), 'https://macbook.tailnet.ts.net:17373');
+    expect(result.token, 'token_1');
     expect(result.projects.single.name, 'pi-relay');
   });
 
