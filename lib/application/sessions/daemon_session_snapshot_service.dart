@@ -10,7 +10,6 @@ class DaemonSessionSnapshotService implements SessionSnapshotService {
   final DaemonClient _client;
 
   @override
-  @override
   Future<TranscriptPage> fetchOlderMessages({
     required Uri baseUrl,
     required String token,
@@ -25,6 +24,27 @@ class DaemonSessionSnapshotService implements SessionSnapshotService {
         sessionId: sessionId,
         before: before,
         limit: limit,
+      );
+    } on DaemonClientException catch (error) {
+      throw SessionSnapshotFailure(error.message);
+    } on FormatException catch (error) {
+      throw SessionSnapshotFailure(error.message);
+    }
+  }
+
+  @override
+  Future<void> sendPrompt({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String text,
+  }) async {
+    try {
+      await _client.sendPrompt(
+        baseUrl: baseUrl,
+        token: token,
+        sessionId: sessionId,
+        text: text,
       );
     } on DaemonClientException catch (error) {
       throw SessionSnapshotFailure(error.message);

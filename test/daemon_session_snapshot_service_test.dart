@@ -46,6 +46,23 @@ void main() {
     expect(page.messages.single.text, 'Older prompt text');
   });
 
+  test('sends prompt through daemon client', () async {
+    final client = _FakeDaemonClient();
+    final service = DaemonSessionSnapshotService(client: client);
+
+    await service.sendPrompt(
+      baseUrl: Uri.parse('https://daemon.example'),
+      token: 'token_1',
+      sessionId: 'sess_1',
+      text: 'hello pi',
+    );
+
+    expect(client.sentPromptBaseUrl.toString(), 'https://daemon.example');
+    expect(client.sentPromptToken, 'token_1');
+    expect(client.sentPromptSessionId, 'sess_1');
+    expect(client.sentPromptText, 'hello pi');
+  });
+
   test('turns daemon failures into session snapshot failures', () async {
     final service = DaemonSessionSnapshotService(
       client: _FakeDaemonClient(
@@ -123,6 +140,10 @@ class _FakeDaemonClient extends DaemonClient {
   String? fetchedOlderSessionId;
   String? fetchedBefore;
   int? fetchedLimit;
+  Uri? sentPromptBaseUrl;
+  String? sentPromptToken;
+  String? sentPromptSessionId;
+  String? sentPromptText;
 
   @override
   @override
@@ -141,6 +162,21 @@ class _FakeDaemonClient extends DaemonClient {
     final error = this.error;
     if (error != null) throw error;
     return olderMessages!;
+  }
+
+  @override
+  Future<void> sendPrompt({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String text,
+  }) async {
+    sentPromptBaseUrl = baseUrl;
+    sentPromptToken = token;
+    sentPromptSessionId = sessionId;
+    sentPromptText = text;
+    final error = this.error;
+    if (error != null) throw error;
   }
 
   @override

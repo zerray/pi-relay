@@ -224,6 +224,69 @@ void main() {
     expect(find.text('Transcript message 79'), findsOneWidget);
   });
 
+  testWidgets('sends prompt through paired daemon without optimistic append',
+      (tester) async {
+    final session = RemoteSession(
+      id: 'sess_1',
+      piSessionId: 'pi_sess_1',
+      projectId: 'proj_1',
+      name: 'Refactor auth module',
+      path: '/repo/session.jsonl',
+      updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+      messageCount: 42,
+      isActive: true,
+    );
+    final snapshotService = _FakeSessionSnapshotService(
+      snapshot: SessionSnapshot(
+        session: session,
+        messages: [
+          TranscriptMessage(
+            id: 'msg_1',
+            role: 'assistant',
+            text: 'Ready',
+            createdAt: DateTime.utc(2026, 5, 9, 9, 46),
+            isStreaming: false,
+          ),
+        ],
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+        isStreaming: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(sessions: [session]),
+        sessionSnapshotService: snapshotService,
+        pairingStore: _FakePairingStore(),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('pi-relay'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refactor auth module'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('session-prompt-field')),
+      '  hello pi  ',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送消息'));
+    await tester.pumpAndSettle();
+
+    expect(
+        snapshotService.sentPromptBaseUrl.toString(), 'https://daemon.example');
+    expect(snapshotService.sentPromptToken, 'token_1');
+    expect(snapshotService.sentPromptSessionId, 'sess_1');
+    expect(snapshotService.sentPromptText, 'hello pi');
+    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('hello pi'), findsNothing);
+  });
+
   testWidgets('loads older transcript messages by pulling down',
       (tester) async {
     final session = RemoteSession(
@@ -488,6 +551,10 @@ class _FakeSessionSnapshotService implements SessionSnapshotService {
   int? fetchedMessageLimit;
   String? fetchedOlderSessionId;
   String? fetchedBefore;
+  Uri? sentPromptBaseUrl;
+  String? sentPromptToken;
+  String? sentPromptSessionId;
+  String? sentPromptText;
 
   @override
   @override
@@ -501,6 +568,19 @@ class _FakeSessionSnapshotService implements SessionSnapshotService {
     fetchedOlderSessionId = sessionId;
     fetchedBefore = before;
     return olderMessages!;
+  }
+
+  @override
+  Future<void> sendPrompt({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String text,
+  }) async {
+    sentPromptBaseUrl = baseUrl;
+    sentPromptToken = token;
+    sentPromptSessionId = sessionId;
+    sentPromptText = text;
   }
 
   @override

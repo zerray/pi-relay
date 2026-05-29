@@ -16,6 +16,13 @@ abstract interface class SessionSnapshotService {
     required String before,
     required int limit,
   });
+
+  Future<void> sendPrompt({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String text,
+  });
 }
 
 class SessionSnapshotFailure implements Exception {

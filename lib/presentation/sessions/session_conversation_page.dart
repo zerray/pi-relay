@@ -12,7 +12,10 @@ class SessionConversationPage extends StatefulWidget {
     required this.onBack,
     this.hasOlderMessages = false,
     this.isLoadingOlder = false,
+    this.isSubmittingPrompt = false,
+    this.promptErrorText,
     this.onLoadOlder,
+    this.onPromptSubmitted,
     super.key,
   });
 
@@ -23,7 +26,10 @@ class SessionConversationPage extends StatefulWidget {
   final VoidCallback onBack;
   final bool hasOlderMessages;
   final bool isLoadingOlder;
+  final bool isSubmittingPrompt;
+  final String? promptErrorText;
   final Future<void> Function()? onLoadOlder;
+  final Future<void> Function(String text)? onPromptSubmitted;
 
   @override
   State<SessionConversationPage> createState() =>
@@ -76,7 +82,10 @@ class _SessionConversationPageState extends State<SessionConversationPage> {
             ),
             Expanded(child: _buildBody(context)),
             if (!widget.isLoading && widget.errorText == null)
-              const _PromptInputBar(),
+              _PromptInputBar(
+                isSubmitting: widget.isSubmittingPrompt,
+                onSubmitted: widget.onPromptSubmitted,
+              ),
           ],
         ),
       ),
@@ -132,7 +141,9 @@ class _SessionConversationPageState extends State<SessionConversationPage> {
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-      itemCount: rows.length + (widget.isLoadingOlder ? 1 : 0),
+      itemCount: rows.length +
+          (widget.isLoadingOlder ? 1 : 0) +
+          (widget.promptErrorText == null ? 0 : 1),
       separatorBuilder: (context, index) {
         final rowIndex = index - (widget.isLoadingOlder ? 1 : 0);
         if (rowIndex < 0 || rowIndex >= rows.length - 1) {
@@ -149,6 +160,9 @@ class _SessionConversationPageState extends State<SessionConversationPage> {
           );
         }
         final rowIndex = index - (widget.isLoadingOlder ? 1 : 0);
+        if (rowIndex >= rows.length) {
+          return _PromptErrorRow(message: widget.promptErrorText!);
+        }
         return _TranscriptRowView(row: rows[rowIndex]);
       },
     );
@@ -275,12 +289,70 @@ class _SessionHeader extends StatelessWidget {
   }
 }
 
-class _PromptInputBar extends StatelessWidget {
-  const _PromptInputBar();
+class _PromptErrorRow extends StatelessWidget {
+  const _PromptErrorRow({required this.message});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colorScheme.errorContainer.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Text(
+            message,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onErrorContainer,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PromptInputBar extends StatefulWidget {
+  const _PromptInputBar({
+    required this.isSubmitting,
+    required this.onSubmitted,
+  });
+
+  final bool isSubmitting;
+  final Future<void> Function(String text)? onSubmitted;
+
+  @override
+  State<_PromptInputBar> createState() => _PromptInputBarState();
+}
+
+class _PromptInputBarState extends State<_PromptInputBar> {
+  final _controller = TextEditingController();
+  var _hasSendableText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_updateSendableText);
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_updateSendableText)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final canSend = _canSend;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       child: DecoratedBox(
@@ -298,29 +370,84 @@ class _PromptInputBar extends StatelessWidget {
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Text(
-                  'Talk to Pi',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onSurfaceVariant
-                            .withValues(alpha: 0.55),
-                      ),
+                child: TextField(
+                  key: const Key('session-prompt-field'),
+                  controller: _controller,
+                  minLines: 1,
+                  maxLines: 4,
+                  enabled: !widget.isSubmitting,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: 'Talk to Pi',
+                    hintStyle: TextStyle(
+                      color:
+                          colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: colorScheme.onSurface.withValues(alpha: 0.10),
-                foregroundColor: colorScheme.onSurface.withValues(alpha: 0.28),
-                child: const Icon(Icons.arrow_upward, size: 20),
+              IconButton.filled(
+                tooltip: '发送消息',
+                onPressed: canSend ? _submit : null,
+                style: IconButton.styleFrom(
+                  fixedSize: const Size(36, 36),
+                  backgroundColor: canSend
+                      ? colorScheme.onSurface.withValues(alpha: 0.68)
+                      : colorScheme.onSurface.withValues(alpha: 0.10),
+                  foregroundColor: canSend
+                      ? colorScheme.surface
+                      : colorScheme.onSurface.withValues(alpha: 0.28),
+                  disabledBackgroundColor:
+                      colorScheme.onSurface.withValues(alpha: 0.10),
+                  disabledForegroundColor:
+                      colorScheme.onSurface.withValues(alpha: 0.28),
+                ),
+                icon: widget.isSubmitting
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colorScheme.surface,
+                        ),
+                      )
+                    : const Icon(Icons.arrow_upward, size: 20),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  bool get _canSend {
+    return !widget.isSubmitting &&
+        widget.onSubmitted != null &&
+        _hasSendableText;
+  }
+
+  Future<void> _submit() async {
+    if (!_canSend) return;
+    final textToSend = _controller.text.trim();
+    _controller.clear();
+    await widget.onSubmitted?.call(textToSend);
+  }
+
+  void _updateSendableText() {
+    final hasSendableText = _controller.text.trim().isNotEmpty;
+    if (hasSendableText == _hasSendableText) return;
+    setState(() {
+      _hasSendableText = hasSendableText;
+    });
   }
 }
 

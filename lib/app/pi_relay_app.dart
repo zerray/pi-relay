@@ -55,9 +55,11 @@ class _PiRelayAppState extends State<PiRelayApp> {
   List<TranscriptMessage> _transcriptMessages = const [];
   bool _isLoadingSnapshot = false;
   String? _snapshotErrorText;
+  String? _promptErrorText;
   String? _olderMessagesCursor;
   bool _hasOlderMessages = false;
   bool _isLoadingOlderMessages = false;
+  bool _isSubmittingPrompt = false;
   bool _isRestoringPairing = false;
 
   @override
@@ -136,9 +138,12 @@ class _PiRelayAppState extends State<PiRelayApp> {
         messages: _transcriptMessages,
         isLoading: _isLoadingSnapshot,
         errorText: _snapshotErrorText,
+        promptErrorText: _promptErrorText,
         hasOlderMessages: _hasOlderMessages,
         isLoadingOlder: _isLoadingOlderMessages,
+        isSubmittingPrompt: _isSubmittingPrompt,
         onLoadOlder: _loadOlderMessages,
+        onPromptSubmitted: _sendPrompt,
         onBack: _closeConversation,
       );
     }
@@ -267,9 +272,11 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _transcriptMessages = const [];
       _isLoadingSnapshot = true;
       _snapshotErrorText = null;
+      _promptErrorText = null;
       _olderMessagesCursor = null;
       _hasOlderMessages = false;
       _isLoadingOlderMessages = false;
+      _isSubmittingPrompt = false;
     });
 
     try {
@@ -285,6 +292,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _transcriptMessages = snapshot.messages;
         _isLoadingSnapshot = false;
         _snapshotErrorText = null;
+        _promptErrorText = null;
         _olderMessagesCursor = snapshot.olderMessagesCursor;
         _hasOlderMessages = snapshot.hasOlderMessages;
       });
@@ -294,6 +302,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _transcriptMessages = const [];
         _isLoadingSnapshot = false;
         _snapshotErrorText = error.toString();
+        _promptErrorText = null;
         _olderMessagesCursor = null;
         _hasOlderMessages = false;
       });
@@ -344,15 +353,54 @@ class _PiRelayAppState extends State<PiRelayApp> {
     }
   }
 
+  Future<void> _sendPrompt(String text) async {
+    final pairingResult = _pairingResult;
+    final selectedSession = _selectedSession;
+    final textToSend = text.trim();
+    if (pairingResult == null ||
+        selectedSession == null ||
+        textToSend.isEmpty) {
+      return;
+    }
+    if (_isSubmittingPrompt) return;
+
+    setState(() {
+      _isSubmittingPrompt = true;
+      _promptErrorText = null;
+    });
+
+    try {
+      await widget.sessionSnapshotService.sendPrompt(
+        baseUrl: pairingResult.baseUrl,
+        token: pairingResult.token,
+        sessionId: selectedSession.id,
+        text: textToSend,
+      );
+      if (!mounted || _selectedSession?.id != selectedSession.id) return;
+      setState(() {
+        _isSubmittingPrompt = false;
+        _promptErrorText = null;
+      });
+    } on Exception catch (error) {
+      if (!mounted || _selectedSession?.id != selectedSession.id) return;
+      setState(() {
+        _isSubmittingPrompt = false;
+        _promptErrorText = error.toString();
+      });
+    }
+  }
+
   void _closeConversation() {
     setState(() {
       _selectedSession = null;
       _transcriptMessages = const [];
       _isLoadingSnapshot = false;
       _snapshotErrorText = null;
+      _promptErrorText = null;
       _olderMessagesCursor = null;
       _hasOlderMessages = false;
       _isLoadingOlderMessages = false;
+      _isSubmittingPrompt = false;
     });
   }
 
@@ -366,9 +414,11 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _transcriptMessages = const [];
       _isLoadingSnapshot = false;
       _snapshotErrorText = null;
+      _promptErrorText = null;
       _olderMessagesCursor = null;
       _hasOlderMessages = false;
       _isLoadingOlderMessages = false;
+      _isSubmittingPrompt = false;
     });
   }
 }

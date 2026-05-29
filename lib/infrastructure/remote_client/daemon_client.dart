@@ -151,6 +151,22 @@ class DaemonClient {
     return TranscriptPage.fromJson(json);
   }
 
+  Future<void> sendPrompt({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String text,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      uri: baseUrl.resolve(
+        '/v1/sessions/${Uri.encodeComponent(sessionId)}/prompt',
+      ),
+      bearerToken: token,
+      body: {'text': text},
+    );
+  }
+
   Future<Map<String, Object?>> _sendJson({
     required String method,
     required Uri uri,

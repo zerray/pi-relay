@@ -257,6 +257,67 @@ void main() {
     expect(controller.offset, controller.position.maxScrollExtent);
   });
 
+  testWidgets('submits trimmed prompt and clears composer', (tester) async {
+    String? submittedPrompt;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: _manyMessages(),
+          isLoading: false,
+          errorText: null,
+          onPromptSubmitted: (text) async {
+            submittedPrompt = text;
+          },
+          onBack: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('session-prompt-field')),
+      '  hello pi  ',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送消息'));
+    await tester.pumpAndSettle();
+
+    expect(submittedPrompt, 'hello pi');
+    expect(find.text('hello pi'), findsNothing);
+  });
+
+  testWidgets('ignores blank prompt submissions', (tester) async {
+    var submitCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: _manyMessages(),
+          isLoading: false,
+          errorText: null,
+          onPromptSubmitted: (_) async {
+            submitCount += 1;
+          },
+          onBack: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('session-prompt-field')),
+      '   \n  ',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('发送消息'));
+    await tester.pumpAndSettle();
+
+    expect(submitCount, 0);
+  });
+
   testWidgets('pulls down to load older messages', (tester) async {
     var loadOlderCount = 0;
 

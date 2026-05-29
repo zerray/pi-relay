@@ -158,6 +158,32 @@ void main() {
     expect(snapshot.messages.single.text, 'Explain this project');
   });
 
+  test('sends prompt with bearer token and JSON body', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    _serve(server, (request) async {
+      expect(request.method, 'POST');
+      expect(request.uri.path, '/v1/sessions/sess_1/prompt');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer token_1');
+      expect(request.headers.contentType?.mimeType, 'application/json');
+      final body = jsonDecode(await utf8.decoder.bind(request).join())
+          as Map<String, Object?>;
+      expect(body, {'text': 'hello pi'});
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({'accepted': true}));
+    });
+
+    final client = DaemonClient();
+    await client.sendPrompt(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      token: 'token_1',
+      sessionId: 'sess_1',
+      text: 'hello pi',
+    );
+  });
+
   test('fetches older session messages with bearer token', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(server.close);
