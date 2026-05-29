@@ -8,7 +8,7 @@ import '../application/projects/project_list_service.dart';
 import '../application/sessions/daemon_session_list_service.dart';
 import '../application/sessions/session_list_service.dart';
 import '../domain/projects/remote_project.dart';
-import '../infrastructure/secure_store/secure_pairing_store.dart';
+import '../infrastructure/secure_store/default_pairing_store.dart';
 import '../domain/sessions/remote_session.dart';
 import '../presentation/pairing/pairing_start_page.dart';
 import '../presentation/projects/projects_page.dart';
@@ -25,7 +25,7 @@ class PiRelayApp extends StatefulWidget {
   })  : pairingService = pairingService ?? DaemonPairingService(),
         projectListService = projectListService ?? DaemonProjectListService(),
         sessionListService = sessionListService ?? DaemonSessionListService(),
-        pairingStore = pairingStore ?? SecurePairingStore();
+        pairingStore = pairingStore ?? createDefaultPairingStore();
 
   final PairingService pairingService;
   final ProjectListService projectListService;
