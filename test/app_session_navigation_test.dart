@@ -12,6 +12,7 @@ import 'package:pi_relay/domain/projects/remote_project.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
 import 'package:pi_relay/domain/sessions/session_snapshot.dart';
 import 'package:pi_relay/domain/transcript/transcript_message.dart';
+import 'package:pi_relay/domain/transcript/transcript_page.dart';
 
 void main() {
   testWidgets('restores saved pairing and opens the project list',
@@ -169,6 +170,79 @@ void main() {
     expect(snapshotService.fetchedMessageLimit, 50);
     expect(find.text('Explain this project'), findsOneWidget);
     expect(find.text('It is a Flutter client.'), findsOneWidget);
+  });
+
+  testWidgets('loads older transcript messages by pulling down',
+      (tester) async {
+    final session = RemoteSession(
+      id: 'sess_1',
+      piSessionId: 'pi_sess_1',
+      projectId: 'proj_1',
+      name: 'Refactor auth module',
+      path: '/repo/session.jsonl',
+      updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+      messageCount: 42,
+      isActive: true,
+    );
+    final snapshotService = _FakeSessionSnapshotService(
+      snapshot: SessionSnapshot(
+        session: session,
+        messages: List.generate(
+          25,
+          (index) => TranscriptMessage(
+            id: 'msg_$index',
+            role: index.isEven ? 'user' : 'assistant',
+            text: 'Recent message $index',
+            createdAt: DateTime.utc(2026, 5, 9, 9, index),
+            isStreaming: false,
+          ),
+        ),
+        olderMessagesCursor: 'cursor_1',
+        hasOlderMessages: true,
+        isStreaming: false,
+      ),
+      olderMessages: TranscriptPage(
+        messages: [
+          TranscriptMessage(
+            id: 'msg_older',
+            role: 'user',
+            text: 'Older prompt text',
+            createdAt: DateTime.utc(2026, 5, 9, 8),
+            isStreaming: false,
+          ),
+        ],
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(sessions: [session]),
+        sessionSnapshotService: snapshotService,
+        pairingStore: _FakePairingStore(),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('pi-relay'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refactor auth module'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    final listView = tester.widget<ListView>(find.byType(ListView));
+    listView.controller!.jumpTo(0);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, 500));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(snapshotService.fetchedBefore, 'cursor_1');
+    expect(snapshotService.fetchedOlderSessionId, 'sess_1');
+    expect(find.text('Older prompt text'), findsOneWidget);
   });
 
   testWidgets('refreshes projects from the paired daemon', (tester) async {
@@ -351,14 +425,31 @@ class _FakeProjectListService implements ProjectListService {
 }
 
 class _FakeSessionSnapshotService implements SessionSnapshotService {
-  _FakeSessionSnapshotService({required this.snapshot});
+  _FakeSessionSnapshotService({required this.snapshot, this.olderMessages});
 
   final SessionSnapshot snapshot;
+  final TranscriptPage? olderMessages;
 
   Uri? fetchedBaseUrl;
   String? fetchedToken;
   String? fetchedSessionId;
   int? fetchedMessageLimit;
+  String? fetchedOlderSessionId;
+  String? fetchedBefore;
+
+  @override
+  @override
+  Future<TranscriptPage> fetchOlderMessages({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String before,
+    required int limit,
+  }) async {
+    fetchedOlderSessionId = sessionId;
+    fetchedBefore = before;
+    return olderMessages!;
+  }
 
   @override
   Future<SessionSnapshot> fetchSnapshot({

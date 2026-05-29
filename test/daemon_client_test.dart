@@ -158,6 +158,47 @@ void main() {
     expect(snapshot.messages.single.text, 'Explain this project');
   });
 
+  test('fetches older session messages with bearer token', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    _serve(server, (request) async {
+      expect(request.method, 'GET');
+      expect(request.uri.path, '/v1/sessions/sess_1/messages');
+      expect(request.uri.queryParameters['before'], 'cursor_1');
+      expect(request.uri.queryParameters['limit'], '50');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer token_1');
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'messages': [
+            {
+              'id': 'msg_older',
+              'role': 'user',
+              'text': 'Older prompt text',
+              'createdAt': '2026-05-09T09:30:00.000Z',
+              'isStreaming': false,
+              'content': [],
+            },
+          ],
+          'olderMessagesCursor': null,
+          'hasOlderMessages': false,
+        }));
+    });
+
+    final client = DaemonClient();
+    final page = await client.fetchOlderMessages(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      token: 'token_1',
+      sessionId: 'sess_1',
+      before: 'cursor_1',
+      limit: 50,
+    );
+
+    expect(page.messages.single.text, 'Older prompt text');
+    expect(page.hasOlderMessages, isFalse);
+  });
+
   test('throws daemon client exception for non-success responses', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(server.close);

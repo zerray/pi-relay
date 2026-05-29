@@ -5,6 +5,7 @@ import '../../domain/pairing/pairing_link.dart';
 import '../../domain/projects/remote_project.dart';
 import '../../domain/sessions/remote_session.dart';
 import '../../domain/sessions/session_snapshot.dart';
+import '../../domain/transcript/transcript_page.dart';
 
 class PairClaimResult {
   const PairClaimResult({
@@ -124,6 +125,30 @@ class DaemonClient {
     );
 
     return SessionSnapshot.fromJson(json);
+  }
+
+  Future<TranscriptPage> fetchOlderMessages({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String before,
+    required int limit,
+  }) async {
+    final uri = baseUrl
+        .resolve('/v1/sessions/${Uri.encodeComponent(sessionId)}/messages')
+        .replace(
+      queryParameters: {
+        'before': before,
+        'limit': limit.toString(),
+      },
+    );
+    final json = await _sendJson(
+      method: 'GET',
+      uri: uri,
+      bearerToken: token,
+    );
+
+    return TranscriptPage.fromJson(json);
   }
 
   Future<Map<String, Object?>> _sendJson({

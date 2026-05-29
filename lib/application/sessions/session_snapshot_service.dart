@@ -1,4 +1,5 @@
 import '../../domain/sessions/session_snapshot.dart';
+import '../../domain/transcript/transcript_page.dart';
 
 abstract interface class SessionSnapshotService {
   Future<SessionSnapshot> fetchSnapshot({
@@ -6,6 +7,14 @@ abstract interface class SessionSnapshotService {
     required String token,
     required String sessionId,
     required int messageLimit,
+  });
+
+  Future<TranscriptPage> fetchOlderMessages({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String before,
+    required int limit,
   });
 }
 

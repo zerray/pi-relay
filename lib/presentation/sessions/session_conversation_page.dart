@@ -3,13 +3,16 @@ import 'package:flutter/material.dart';
 import '../../domain/sessions/remote_session.dart';
 import '../../domain/transcript/transcript_message.dart';
 
-class SessionConversationPage extends StatelessWidget {
+class SessionConversationPage extends StatefulWidget {
   const SessionConversationPage({
     required this.session,
     required this.messages,
     required this.isLoading,
     required this.errorText,
     required this.onBack,
+    this.hasOlderMessages = false,
+    this.isLoadingOlder = false,
+    this.onLoadOlder,
     super.key,
   });
 
@@ -18,6 +21,46 @@ class SessionConversationPage extends StatelessWidget {
   final bool isLoading;
   final String? errorText;
   final VoidCallback onBack;
+  final bool hasOlderMessages;
+  final bool isLoadingOlder;
+  final Future<void> Function()? onLoadOlder;
+
+  @override
+  State<SessionConversationPage> createState() =>
+      _SessionConversationPageState();
+}
+
+class _SessionConversationPageState extends State<SessionConversationPage> {
+  final _scrollController = ScrollController();
+  var _isAtBottom = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_updateBottomState);
+    _scheduleScrollToBottom();
+  }
+
+  @override
+  void didUpdateWidget(SessionConversationPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldLastId =
+        oldWidget.messages.isEmpty ? null : oldWidget.messages.last.id;
+    final newLastId = widget.messages.isEmpty ? null : widget.messages.last.id;
+    final shouldFollowBottom =
+        oldWidget.messages.isEmpty || oldLastId != newLastId && _isAtBottom;
+    if (shouldFollowBottom) {
+      _scheduleScrollToBottom();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_updateBottomState)
+      ..dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,20 +69,34 @@ class SessionConversationPage extends StatelessWidget {
         leading: IconButton(
           tooltip: '返回会话',
           icon: const Icon(Icons.arrow_back),
-          onPressed: onBack,
+          onPressed: widget.onBack,
         ),
-        title: Text(session.name),
+        title: Text(widget.session.name),
       ),
       body: _buildBody(context),
+      floatingActionButton: _showJumpToBottomButton
+          ? FloatingActionButton.small(
+              tooltip: '跳到最新消息',
+              onPressed: _scrollToBottom,
+              child: const Icon(Icons.keyboard_arrow_down),
+            )
+          : null,
     );
   }
 
+  bool get _showJumpToBottomButton {
+    return !widget.isLoading &&
+        widget.errorText == null &&
+        widget.messages.isNotEmpty &&
+        !_isAtBottom;
+  }
+
   Widget _buildBody(BuildContext context) {
-    if (isLoading) {
+    if (widget.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final errorText = this.errorText;
+    final errorText = widget.errorText;
     if (errorText != null) {
       return Center(
         child: Padding(
@@ -55,21 +112,61 @@ class SessionConversationPage extends StatelessWidget {
       );
     }
 
-    if (messages.isEmpty) {
+    if (widget.messages.isEmpty) {
       return Center(
         child: Text('暂无消息', style: Theme.of(context).textTheme.titleMedium),
       );
     }
 
-    return ListView.separated(
+    final listView = ListView.separated(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      itemCount: messages.length,
+      itemCount: widget.messages.length + (widget.isLoadingOlder ? 1 : 0),
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final message = messages[index];
+        if (widget.isLoadingOlder && index == 0) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final messageIndex = index - (widget.isLoadingOlder ? 1 : 0);
+        final message = widget.messages[messageIndex];
         return _TranscriptMessageCard(message: message);
       },
     );
+
+    final onLoadOlder = widget.onLoadOlder;
+    if (!widget.hasOlderMessages || onLoadOlder == null) {
+      return listView;
+    }
+
+    return RefreshIndicator(
+      onRefresh: onLoadOlder,
+      child: listView,
+    );
+  }
+
+  void _scheduleScrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollToBottom();
+    });
+  }
+
+  void _scrollToBottom() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    _updateBottomState();
+  }
+
+  void _updateBottomState() {
+    if (!_scrollController.hasClients) return;
+    final isAtBottom =
+        _scrollController.position.maxScrollExtent - _scrollController.offset <=
+            24;
+    if (isAtBottom == _isAtBottom) return;
+    setState(() {
+      _isAtBottom = isAtBottom;
+    });
   }
 }
 

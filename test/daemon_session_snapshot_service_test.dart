@@ -4,6 +4,7 @@ import 'package:pi_relay/application/sessions/session_snapshot_service.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
 import 'package:pi_relay/domain/sessions/session_snapshot.dart';
 import 'package:pi_relay/domain/transcript/transcript_message.dart';
+import 'package:pi_relay/domain/transcript/transcript_page.dart';
 import 'package:pi_relay/infrastructure/remote_client/daemon_client.dart';
 
 void main() {
@@ -23,6 +24,26 @@ void main() {
     expect(client.fetchedSessionId, 'sess_1');
     expect(client.fetchedMessageLimit, 50);
     expect(snapshot.messages.single.text, 'Explain this project');
+  });
+
+  test('fetches older messages through daemon client', () async {
+    final client = _FakeDaemonClient(olderMessages: _olderPage());
+    final service = DaemonSessionSnapshotService(client: client);
+
+    final page = await service.fetchOlderMessages(
+      baseUrl: Uri.parse('https://daemon.example'),
+      token: 'token_1',
+      sessionId: 'sess_1',
+      before: 'cursor_1',
+      limit: 50,
+    );
+
+    expect(client.fetchedOlderBaseUrl.toString(), 'https://daemon.example');
+    expect(client.fetchedOlderToken, 'token_1');
+    expect(client.fetchedOlderSessionId, 'sess_1');
+    expect(client.fetchedBefore, 'cursor_1');
+    expect(client.fetchedLimit, 50);
+    expect(page.messages.single.text, 'Older prompt text');
   });
 
   test('turns daemon failures into session snapshot failures', () async {
@@ -70,16 +91,57 @@ SessionSnapshot _snapshot() {
   );
 }
 
+TranscriptPage _olderPage() {
+  return TranscriptPage(
+    messages: [
+      TranscriptMessage(
+        id: 'msg_older',
+        role: 'user',
+        text: 'Older prompt text',
+        createdAt: DateTime.utc(2026, 5, 9, 9, 30),
+        isStreaming: false,
+      ),
+    ],
+    olderMessagesCursor: null,
+    hasOlderMessages: false,
+  );
+}
+
 class _FakeDaemonClient extends DaemonClient {
-  _FakeDaemonClient({this.snapshot, this.error});
+  _FakeDaemonClient({this.snapshot, this.olderMessages, this.error});
 
   final SessionSnapshot? snapshot;
+  final TranscriptPage? olderMessages;
   final Object? error;
 
   Uri? fetchedBaseUrl;
   String? fetchedToken;
   String? fetchedSessionId;
   int? fetchedMessageLimit;
+  Uri? fetchedOlderBaseUrl;
+  String? fetchedOlderToken;
+  String? fetchedOlderSessionId;
+  String? fetchedBefore;
+  int? fetchedLimit;
+
+  @override
+  @override
+  Future<TranscriptPage> fetchOlderMessages({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required String before,
+    required int limit,
+  }) async {
+    fetchedOlderBaseUrl = baseUrl;
+    fetchedOlderToken = token;
+    fetchedOlderSessionId = sessionId;
+    fetchedBefore = before;
+    fetchedLimit = limit;
+    final error = this.error;
+    if (error != null) throw error;
+    return olderMessages!;
+  }
 
   @override
   Future<SessionSnapshot> fetchSessionSnapshot({

@@ -55,6 +55,9 @@ class _PiRelayAppState extends State<PiRelayApp> {
   List<TranscriptMessage> _transcriptMessages = const [];
   bool _isLoadingSnapshot = false;
   String? _snapshotErrorText;
+  String? _olderMessagesCursor;
+  bool _hasOlderMessages = false;
+  bool _isLoadingOlderMessages = false;
   bool _isRestoringPairing = false;
 
   @override
@@ -133,6 +136,9 @@ class _PiRelayAppState extends State<PiRelayApp> {
         messages: _transcriptMessages,
         isLoading: _isLoadingSnapshot,
         errorText: _snapshotErrorText,
+        hasOlderMessages: _hasOlderMessages,
+        isLoadingOlder: _isLoadingOlderMessages,
+        onLoadOlder: _loadOlderMessages,
         onBack: _closeConversation,
       );
     }
@@ -261,6 +267,9 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _transcriptMessages = const [];
       _isLoadingSnapshot = true;
       _snapshotErrorText = null;
+      _olderMessagesCursor = null;
+      _hasOlderMessages = false;
+      _isLoadingOlderMessages = false;
     });
 
     try {
@@ -276,6 +285,8 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _transcriptMessages = snapshot.messages;
         _isLoadingSnapshot = false;
         _snapshotErrorText = null;
+        _olderMessagesCursor = snapshot.olderMessagesCursor;
+        _hasOlderMessages = snapshot.hasOlderMessages;
       });
     } on Exception catch (error) {
       if (!mounted || _selectedSession?.id != session.id) return;
@@ -283,6 +294,52 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _transcriptMessages = const [];
         _isLoadingSnapshot = false;
         _snapshotErrorText = error.toString();
+        _olderMessagesCursor = null;
+        _hasOlderMessages = false;
+      });
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    final pairingResult = _pairingResult;
+    final selectedSession = _selectedSession;
+    final before = _olderMessagesCursor;
+    if (pairingResult == null || selectedSession == null || before == null) {
+      return;
+    }
+    if (!_hasOlderMessages || _isLoadingOlderMessages) return;
+
+    setState(() {
+      _isLoadingOlderMessages = true;
+    });
+
+    try {
+      final page = await widget.sessionSnapshotService.fetchOlderMessages(
+        baseUrl: pairingResult.baseUrl,
+        token: pairingResult.token,
+        sessionId: selectedSession.id,
+        before: before,
+        limit: 50,
+      );
+      if (!mounted || _selectedSession?.id != selectedSession.id) return;
+      final existingIds =
+          _transcriptMessages.map((message) => message.id).toSet();
+      final olderMessages = page.messages
+          .where((message) => !existingIds.contains(message.id))
+          .toList(growable: false);
+      setState(() {
+        _transcriptMessages = [
+          ...olderMessages,
+          ..._transcriptMessages,
+        ];
+        _olderMessagesCursor = page.olderMessagesCursor;
+        _hasOlderMessages = page.hasOlderMessages;
+        _isLoadingOlderMessages = false;
+      });
+    } on Exception {
+      if (!mounted || _selectedSession?.id != selectedSession.id) return;
+      setState(() {
+        _isLoadingOlderMessages = false;
       });
     }
   }
@@ -293,6 +350,9 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _transcriptMessages = const [];
       _isLoadingSnapshot = false;
       _snapshotErrorText = null;
+      _olderMessagesCursor = null;
+      _hasOlderMessages = false;
+      _isLoadingOlderMessages = false;
     });
   }
 
@@ -306,6 +366,9 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _transcriptMessages = const [];
       _isLoadingSnapshot = false;
       _snapshotErrorText = null;
+      _olderMessagesCursor = null;
+      _hasOlderMessages = false;
+      _isLoadingOlderMessages = false;
     });
   }
 }

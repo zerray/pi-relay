@@ -67,6 +67,67 @@ void main() {
     expect(find.text('It is a Flutter client.'), findsOneWidget);
   });
 
+  testWidgets('starts at the newest message and can jump back to bottom',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: _manyMessages(),
+          isLoading: false,
+          errorText: null,
+          onBack: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final listView = tester.widget<ListView>(find.byType(ListView));
+    final controller = listView.controller!;
+    expect(controller.offset, controller.position.maxScrollExtent);
+    expect(find.byTooltip('跳到最新消息'), findsNothing);
+
+    controller.jumpTo(0);
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('跳到最新消息'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('跳到最新消息'));
+    await tester.pumpAndSettle();
+
+    expect(controller.offset, controller.position.maxScrollExtent);
+  });
+
+  testWidgets('pulls down to load older messages', (tester) async {
+    var loadOlderCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: _manyMessages(),
+          isLoading: false,
+          errorText: null,
+          hasOlderMessages: true,
+          onLoadOlder: () async {
+            loadOlderCount += 1;
+          },
+          onBack: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final listView = tester.widget<ListView>(find.byType(ListView));
+    listView.controller!.jumpTo(0);
+    await tester.pump();
+    await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(loadOlderCount, 1);
+  });
+
   testWidgets('shows snapshot error', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -82,4 +143,17 @@ void main() {
 
     expect(find.text('snapshot fetch failed'), findsOneWidget);
   });
+}
+
+List<TranscriptMessage> _manyMessages() {
+  return List.generate(
+    30,
+    (index) => TranscriptMessage(
+      id: 'msg_$index',
+      role: index.isEven ? 'user' : 'assistant',
+      text: 'Message $index',
+      createdAt: DateTime.utc(2026, 5, 9, 9, index),
+      isStreaming: false,
+    ),
+  );
 }
