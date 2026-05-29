@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../application/pairing/daemon_pairing_service.dart';
 import '../application/pairing/pairing_service.dart';
+import '../application/pairing/pairing_store.dart';
 import '../application/projects/daemon_project_list_service.dart';
 import '../application/projects/project_list_service.dart';
 import '../application/sessions/daemon_session_list_service.dart';
 import '../application/sessions/session_list_service.dart';
 import '../domain/projects/remote_project.dart';
+import '../infrastructure/secure_store/secure_pairing_store.dart';
 import '../domain/sessions/remote_session.dart';
 import '../presentation/pairing/pairing_start_page.dart';
 import '../presentation/projects/projects_page.dart';
@@ -17,15 +19,18 @@ class PiRelayApp extends StatefulWidget {
     PairingService? pairingService,
     ProjectListService? projectListService,
     SessionListService? sessionListService,
+    PairingStore? pairingStore,
     this.platform,
     super.key,
   })  : pairingService = pairingService ?? DaemonPairingService(),
         projectListService = projectListService ?? DaemonProjectListService(),
-        sessionListService = sessionListService ?? DaemonSessionListService();
+        sessionListService = sessionListService ?? DaemonSessionListService(),
+        pairingStore = pairingStore ?? SecurePairingStore();
 
   final PairingService pairingService;
   final ProjectListService projectListService;
   final SessionListService sessionListService;
+  final PairingStore? pairingStore;
   final TargetPlatform? platform;
 
   @override
@@ -38,6 +43,50 @@ class _PiRelayAppState extends State<PiRelayApp> {
   List<RemoteSession> _sessions = const [];
   bool _isLoadingSessions = false;
   String? _sessionErrorText;
+  bool _isRestoringPairing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isRestoringPairing = widget.pairingStore != null;
+    _restorePairing();
+  }
+
+  Future<void> _restorePairing() async {
+    final pairingStore = widget.pairingStore;
+    if (pairingStore == null) return;
+
+    try {
+      final savedPairing = await pairingStore.load();
+      if (savedPairing == null) {
+        if (!mounted) return;
+        setState(() {
+          _isRestoringPairing = false;
+        });
+        return;
+      }
+
+      final projects = await widget.projectListService.fetchProjects(
+        baseUrl: savedPairing.baseUrl,
+        token: savedPairing.token,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pairingResult = PairingResult(
+          daemonName: savedPairing.daemonName,
+          baseUrl: savedPairing.baseUrl,
+          token: savedPairing.token,
+          projects: projects,
+        );
+        _isRestoringPairing = false;
+      });
+    } on Exception {
+      if (!mounted) return;
+      setState(() {
+        _isRestoringPairing = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +103,12 @@ class _PiRelayAppState extends State<PiRelayApp> {
   }
 
   Widget _buildHome() {
+    if (_isRestoringPairing) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final pairingResult = _pairingResult;
     if (pairingResult == null) {
       return PairingStartPage(onPairingPayloadSubmitted: _pair);
@@ -81,6 +136,13 @@ class _PiRelayAppState extends State<PiRelayApp> {
 
   Future<void> _pair(String pairingPayload) async {
     final result = await widget.pairingService.pair(pairingPayload);
+    await widget.pairingStore?.save(
+      SavedPairing(
+        daemonName: result.daemonName,
+        baseUrl: result.baseUrl,
+        token: result.token,
+      ),
+    );
     if (!mounted) return;
     setState(() {
       _pairingResult = result;

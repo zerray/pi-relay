@@ -2,12 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pi_relay/app/pi_relay_app.dart';
 import 'package:pi_relay/application/pairing/pairing_service.dart';
+import 'package:pi_relay/application/pairing/pairing_store.dart';
 import 'package:pi_relay/domain/projects/remote_project.dart';
 import 'package:pi_relay/presentation/pairing/pairing_start_page.dart';
 
 void main() {
   testWidgets('shows the launch page title', (tester) async {
-    await tester.pumpWidget(PiRelayApp(pairingService: _FakePairingService()));
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        pairingStore: _FakePairingStore(),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('Pi Relay'), findsOneWidget);
     expect(find.text('连接到 Pi Remote Control'), findsOneWidget);
@@ -76,9 +83,11 @@ void main() {
     await tester.pumpWidget(
       PiRelayApp(
         pairingService: service,
+        pairingStore: _FakePairingStore(),
         platform: TargetPlatform.macOS,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('输入配对字符串'));
     await tester.pumpAndSettle();
@@ -98,9 +107,11 @@ void main() {
       PiRelayApp(
         pairingService:
             _FakePairingService(error: const PairingFailure('配对失败')),
+        pairingStore: _FakePairingStore(),
         platform: TargetPlatform.macOS,
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('输入配对字符串'));
     await tester.pumpAndSettle();
@@ -112,6 +123,23 @@ void main() {
     expect(find.text('配对失败'), findsOneWidget);
     expect(find.text('Pi Relay'), findsOneWidget);
   });
+}
+
+class _FakePairingStore implements PairingStore {
+  SavedPairing? savedPairing;
+
+  @override
+  Future<void> clear() async {
+    savedPairing = null;
+  }
+
+  @override
+  Future<SavedPairing?> load() async => savedPairing;
+
+  @override
+  Future<void> save(SavedPairing pairing) async {
+    savedPairing = pairing;
+  }
 }
 
 class _FakePairingService implements PairingService {

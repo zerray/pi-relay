@@ -4,12 +4,65 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pi_relay/app/pi_relay_app.dart';
 import 'package:pi_relay/application/pairing/pairing_service.dart';
+import 'package:pi_relay/application/pairing/pairing_store.dart';
 import 'package:pi_relay/application/projects/project_list_service.dart';
 import 'package:pi_relay/application/sessions/session_list_service.dart';
 import 'package:pi_relay/domain/projects/remote_project.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
 
 void main() {
+  testWidgets('restores saved pairing and opens the project list',
+      (tester) async {
+    final projectListService = _FakeProjectListService(
+      projects: const [
+        RemoteProject(id: 'proj_1', name: 'pi-relay', path: '/repo/pi-relay'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FailingPairingService(),
+        projectListService: projectListService,
+        pairingStore: _FakePairingStore(
+          savedPairing: SavedPairing(
+            daemonName: 'macbook-pro',
+            baseUrl: Uri.parse('https://daemon.example'),
+            token: 'token_1',
+          ),
+        ),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+        projectListService.fetchedBaseUrl.toString(), 'https://daemon.example');
+    expect(projectListService.fetchedToken, 'token_1');
+    expect(find.text('pi-relay'), findsOneWidget);
+    expect(find.text('输入配对字符串'), findsNothing);
+  });
+
+  testWidgets('saves pairing credentials after successful pairing',
+      (tester) async {
+    final pairingStore = _FakePairingStore();
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(),
+        pairingStore: pairingStore,
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _pair(tester);
+
+    expect(pairingStore.savedPairing?.daemonName, 'macbook-pro');
+    expect(pairingStore.savedPairing?.baseUrl.toString(),
+        'https://daemon.example');
+    expect(pairingStore.savedPairing?.token, 'token_1');
+  });
+
   testWidgets('opens a project and displays its sessions', (tester) async {
     final sessionsCompleter = Completer<List<RemoteSession>>();
     final sessionListService = _FakeSessionListService(
@@ -32,6 +85,7 @@ void main() {
       PiRelayApp(
         pairingService: _FakePairingService(),
         sessionListService: sessionListService,
+        pairingStore: _FakePairingStore(),
         platform: TargetPlatform.macOS,
       ),
     );
@@ -69,6 +123,7 @@ void main() {
         pairingService: _FakePairingService(),
         projectListService: projectListService,
         sessionListService: _FakeSessionListService(),
+        pairingStore: _FakePairingStore(),
         platform: TargetPlatform.macOS,
       ),
     );
@@ -104,6 +159,7 @@ void main() {
       PiRelayApp(
         pairingService: _FakePairingService(),
         sessionListService: sessionListService,
+        pairingStore: _FakePairingStore(),
         platform: TargetPlatform.macOS,
       ),
     );
@@ -140,6 +196,7 @@ void main() {
         pairingService: _FakePairingService(),
         sessionListService: _FakeSessionListService(
             error: const SessionListFailure('session fetch failed')),
+        pairingStore: _FakePairingStore(),
         platform: TargetPlatform.macOS,
       ),
     );
@@ -159,12 +216,41 @@ void main() {
 }
 
 Future<void> _pair(WidgetTester tester) async {
+  await tester.pumpAndSettle();
   await tester.tap(find.text('输入配对字符串'));
   await tester.pumpAndSettle();
   await tester.enterText(
       find.byKey(const Key('pairing-payload-field')), 'abc123');
   await tester.tap(find.text('配对'));
   await tester.pumpAndSettle();
+}
+
+class _FailingPairingService implements PairingService {
+  @override
+  Future<PairingResult> pair(String pairingPayload) async {
+    throw StateError('pairing should not be called');
+  }
+}
+
+class _FakePairingStore implements PairingStore {
+  _FakePairingStore({this.savedPairing});
+
+  SavedPairing? savedPairing;
+  var cleared = false;
+
+  @override
+  Future<SavedPairing?> load() async => savedPairing;
+
+  @override
+  Future<void> save(SavedPairing pairing) async {
+    savedPairing = pairing;
+  }
+
+  @override
+  Future<void> clear() async {
+    cleared = true;
+    savedPairing = null;
+  }
 }
 
 class _FakePairingService implements PairingService {
