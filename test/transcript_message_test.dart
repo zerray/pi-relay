@@ -21,6 +21,44 @@ void main() {
     expect(message.isStreaming, isFalse);
   });
 
+  test('infers role for kind-only normalized transcript items', () {
+    final message = TranscriptMessage.fromJson({
+      'id': 'think_1',
+      'kind': 'thinking',
+      'text': 'Need inspect files',
+      'createdAt': '2026-05-09T09:47:00.000Z',
+      'isStreaming': false,
+    });
+
+    expect(message.role, 'assistant');
+    expect(message.kind, 'thinking');
+  });
+
+  test('decodes normalized transcript item fields', () {
+    final message = TranscriptMessage.fromJson({
+      'id': 'call_1',
+      'role': 'assistant',
+      'kind': 'toolCall',
+      'text': 'read',
+      'createdAt': '2026-05-09T09:47:00.000Z',
+      'isStreaming': false,
+      'toolCallId': 'read_1',
+      'toolName': 'read',
+      'summary': 'Sources/App.swift',
+      'arguments': {'path': 'Sources/App.swift'},
+      'isTruncated': true,
+      'originalBytes': 1024,
+    });
+
+    expect(message.kind, 'toolCall');
+    expect(message.toolCallId, 'read_1');
+    expect(message.toolName, 'read');
+    expect(message.summary, 'Sources/App.swift');
+    expect(message.arguments, {'path': 'Sources/App.swift'});
+    expect(message.isTruncated, isTrue);
+    expect(message.originalBytes, 1024);
+  });
+
   test('falls back to text content blocks when text is absent', () {
     final message = TranscriptMessage.fromJson({
       'id': 'msg_2',

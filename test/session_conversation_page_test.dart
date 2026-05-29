@@ -61,10 +61,95 @@ void main() {
       ),
     );
 
-    expect(find.text('user'), findsOneWidget);
+    expect(find.text('user'), findsNothing);
     expect(find.text('Explain this project'), findsOneWidget);
-    expect(find.text('assistant'), findsOneWidget);
+    expect(find.text('assistant'), findsNothing);
     expect(find.text('It is a Flutter client.'), findsOneWidget);
+    expect(find.text('Talk to Pi'), findsOneWidget);
+  });
+
+  testWidgets('renders assistant markdown code blocks in chat style',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: [
+            TranscriptMessage(
+              id: 'msg_1',
+              role: 'assistant',
+              text: 'Run this:\n```bash\nflutter test\n```',
+              createdAt: DateTime.utc(2026, 5, 9, 9, 46),
+              isStreaming: false,
+            ),
+          ],
+          isLoading: false,
+          errorText: null,
+          onBack: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Run this:'), findsOneWidget);
+    expect(find.text('flutter test'), findsOneWidget);
+    expect(find.byKey(const Key('markdown-code-block-0')), findsOneWidget);
+  });
+
+  testWidgets('groups activity messages and opens tool details',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: [
+            TranscriptMessage(
+              id: 'think_1',
+              role: 'assistant',
+              kind: 'thinking',
+              text: 'Need inspect files',
+              createdAt: DateTime.utc(2026, 5, 9, 9, 46),
+              isStreaming: false,
+            ),
+            TranscriptMessage(
+              id: 'call_1',
+              role: 'assistant',
+              kind: 'toolCall',
+              text: 'read',
+              createdAt: DateTime.utc(2026, 5, 9, 9, 47),
+              isStreaming: false,
+              toolCallId: 'read_1',
+              arguments: {'path': 'Sources/App.swift'},
+            ),
+            TranscriptMessage(
+              id: 'result_1',
+              role: 'toolResult',
+              kind: 'toolResult',
+              text: 'let app = App()',
+              createdAt: DateTime.utc(2026, 5, 9, 9, 48),
+              isStreaming: false,
+              toolCallId: 'read_1',
+            ),
+          ],
+          isLoading: false,
+          errorText: null,
+          onBack: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('Ran 1 tool'), findsOneWidget);
+    await tester.tap(find.text('Ran 1 tool'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Thinking'), findsOneWidget);
+    expect(find.text('Read'), findsOneWidget);
+    await tester.tap(find.text('Read'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Path'), findsOneWidget);
+    expect(find.text('Sources/App.swift'), findsOneWidget);
+    expect(find.text('Result'), findsOneWidget);
+    expect(find.text('let app = App()'), findsOneWidget);
   });
 
   testWidgets('starts at the newest variable-height message', (tester) async {
