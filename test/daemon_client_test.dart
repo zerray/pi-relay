@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pi_relay/domain/pairing/pairing_link.dart';
+import 'package:pi_relay/domain/sessions/session_stream_event.dart';
 import 'package:pi_relay/infrastructure/remote_client/daemon_client.dart';
 
 void main() {
@@ -182,6 +183,43 @@ void main() {
       sessionId: 'sess_1',
       text: 'hello pi',
     );
+  });
+
+  test('streams session events with bearer token', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((request) async {
+      expect(request.uri.path, '/v1/sessions/sess_1/stream');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer token_1');
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.add(jsonEncode({
+        'type': 'transcript_message_end',
+        'message': {
+          'id': 'msg_live',
+          'role': 'assistant',
+          'text': 'Live response',
+          'createdAt': '2026-05-09T09:47:00.000Z',
+          'isStreaming': false,
+          'content': [
+            {'type': 'text', 'text': 'Live response'},
+          ],
+        },
+      }));
+      await socket.close();
+    });
+
+    final client = DaemonClient();
+    final event = await client
+        .watchSession(
+          baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+          token: 'token_1',
+          sessionId: 'sess_1',
+        )
+        .first;
+
+    expect(event, isA<TranscriptMessageEndEvent>());
+    expect((event as TranscriptMessageEndEvent).message.text, 'Live response');
   });
 
   test('fetches older session messages with bearer token', () async {

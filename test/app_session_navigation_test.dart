@@ -11,6 +11,7 @@ import 'package:pi_relay/application/sessions/session_snapshot_service.dart';
 import 'package:pi_relay/domain/projects/remote_project.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
 import 'package:pi_relay/domain/sessions/session_snapshot.dart';
+import 'package:pi_relay/domain/sessions/session_stream_event.dart';
 import 'package:pi_relay/domain/transcript/transcript_message.dart';
 import 'package:pi_relay/domain/transcript/transcript_page.dart';
 
@@ -222,6 +223,73 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Transcript message 79'), findsOneWidget);
+  });
+
+  testWidgets('receives live transcript messages from the session stream',
+      (tester) async {
+    final session = RemoteSession(
+      id: 'sess_1',
+      piSessionId: 'pi_sess_1',
+      projectId: 'proj_1',
+      name: 'Refactor auth module',
+      path: '/repo/session.jsonl',
+      updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+      messageCount: 42,
+      isActive: true,
+    );
+    final snapshotService = _FakeSessionSnapshotService(
+      snapshot: SessionSnapshot(
+        session: session,
+        messages: [
+          TranscriptMessage(
+            id: 'msg_1',
+            role: 'assistant',
+            text: 'Ready',
+            createdAt: DateTime.utc(2026, 5, 9, 9, 46),
+            isStreaming: false,
+          ),
+        ],
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+        isStreaming: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(sessions: [session]),
+        sessionSnapshotService: snapshotService,
+        pairingStore: _FakePairingStore(),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('pi-relay'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refactor auth module'));
+    await tester.pumpAndSettle();
+
+    expect(snapshotService.watchedBaseUrl.toString(), 'https://daemon.example');
+    expect(snapshotService.watchedToken, 'token_1');
+    expect(snapshotService.watchedSessionId, 'sess_1');
+
+    snapshotService.addStreamEvent(
+      TranscriptMessageEndEvent(
+        TranscriptMessage(
+          id: 'msg_live',
+          role: 'assistant',
+          text: 'Live response',
+          createdAt: DateTime.utc(2026, 5, 9, 9, 48),
+          isStreaming: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('Live response'), findsOneWidget);
   });
 
   testWidgets('sends prompt through paired daemon without optimistic append',
@@ -551,6 +619,10 @@ class _FakeSessionSnapshotService implements SessionSnapshotService {
   int? fetchedMessageLimit;
   String? fetchedOlderSessionId;
   String? fetchedBefore;
+  Uri? watchedBaseUrl;
+  String? watchedToken;
+  String? watchedSessionId;
+  final _streamController = StreamController<SessionStreamEvent>.broadcast();
   Uri? sentPromptBaseUrl;
   String? sentPromptToken;
   String? sentPromptSessionId;
@@ -568,6 +640,22 @@ class _FakeSessionSnapshotService implements SessionSnapshotService {
     fetchedOlderSessionId = sessionId;
     fetchedBefore = before;
     return olderMessages!;
+  }
+
+  @override
+  Stream<SessionStreamEvent> watchSession({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+  }) {
+    watchedBaseUrl = baseUrl;
+    watchedToken = token;
+    watchedSessionId = sessionId;
+    return _streamController.stream;
+  }
+
+  void addStreamEvent(SessionStreamEvent event) {
+    _streamController.add(event);
   }
 
   @override

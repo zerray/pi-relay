@@ -39,8 +39,8 @@ class TranscriptMessage {
     final toolCallId = json['toolCallId'];
     final toolName = json['toolName'];
     final summary = json['summary'];
-    final isTruncated = json['isTruncated'];
-    final originalBytes = json['originalBytes'];
+    final isTruncated = json['isTruncated'] ?? json['textTruncated'];
+    final originalBytes = json['originalBytes'] ?? json['textOriginalBytes'];
 
     if (id is! String || createdAtValue is! String || isStreaming is! bool) {
       throw const FormatException(

@@ -1,4 +1,5 @@
 import '../../domain/sessions/session_snapshot.dart';
+import '../../domain/sessions/session_stream_event.dart';
 import '../../domain/transcript/transcript_page.dart';
 
 abstract interface class SessionSnapshotService {
@@ -22,6 +23,12 @@ abstract interface class SessionSnapshotService {
     required String token,
     required String sessionId,
     required String text,
+  });
+
+  Stream<SessionStreamEvent> watchSession({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
   });
 }
 

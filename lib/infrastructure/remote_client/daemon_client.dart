@@ -5,6 +5,7 @@ import '../../domain/pairing/pairing_link.dart';
 import '../../domain/projects/remote_project.dart';
 import '../../domain/sessions/remote_session.dart';
 import '../../domain/sessions/session_snapshot.dart';
+import '../../domain/sessions/session_stream_event.dart';
 import '../../domain/transcript/transcript_page.dart';
 
 class PairClaimResult {
@@ -165,6 +166,45 @@ class DaemonClient {
       bearerToken: token,
       body: {'text': text},
     );
+  }
+
+  Stream<SessionStreamEvent> watchSession({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+  }) async* {
+    final httpUri = baseUrl.resolve(
+      '/v1/sessions/${Uri.encodeComponent(sessionId)}/stream',
+    );
+    final streamUri = httpUri.replace(
+      scheme: switch (httpUri.scheme) {
+        'https' => 'wss',
+        'http' => 'ws',
+        final scheme => scheme,
+      },
+    );
+    final socket = await WebSocket.connect(
+      streamUri.toString(),
+      headers: {HttpHeaders.authorizationHeader: 'Bearer $token'},
+    ).timeout(const Duration(seconds: 15));
+
+    try {
+      await for (final data in socket) {
+        final text = switch (data) {
+          String() => data,
+          List<int>() => utf8.decode(data),
+          _ => throw const FormatException('WebSocket message is invalid.'),
+        };
+        final decoded = jsonDecode(text);
+        if (decoded is! Map<String, Object?>) {
+          throw const FormatException(
+              'WebSocket message is not a JSON object.');
+        }
+        yield SessionStreamEvent.fromJson(decoded);
+      }
+    } finally {
+      await socket.close();
+    }
   }
 
   Future<Map<String, Object?>> _sendJson({

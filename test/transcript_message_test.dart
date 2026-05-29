@@ -59,6 +59,22 @@ void main() {
     expect(message.originalBytes, 1024);
   });
 
+  test('decodes daemon preview truncation fields', () {
+    final message = TranscriptMessage.fromJson({
+      'id': 'msg_1',
+      'role': 'toolResult',
+      'text': 'preview',
+      'textTruncated': true,
+      'textOriginalBytes': 20480,
+      'createdAt': '2026-05-09T09:47:00.000Z',
+      'isStreaming': false,
+      'content': const [],
+    });
+
+    expect(message.isTruncated, isTrue);
+    expect(message.originalBytes, 20480);
+  });
+
   test('falls back to text content blocks when text is absent', () {
     final message = TranscriptMessage.fromJson({
       'id': 'msg_2',

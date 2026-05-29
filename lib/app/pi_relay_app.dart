@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../application/pairing/daemon_pairing_service.dart';
@@ -12,6 +14,8 @@ import '../application/sessions/session_snapshot_service.dart';
 import '../domain/projects/remote_project.dart';
 import '../infrastructure/secure_store/default_pairing_store.dart';
 import '../domain/sessions/remote_session.dart';
+import '../domain/sessions/session_stream_event.dart';
+import '../domain/sessions/session_stream_reducer.dart';
 import '../domain/transcript/transcript_message.dart';
 import '../presentation/pairing/pairing_start_page.dart';
 import '../presentation/projects/projects_page.dart';
@@ -46,6 +50,8 @@ class PiRelayApp extends StatefulWidget {
 }
 
 class _PiRelayAppState extends State<PiRelayApp> {
+  static const _streamReducer = SessionStreamReducer();
+
   PairingResult? _pairingResult;
   RemoteProject? _selectedProject;
   List<RemoteSession> _sessions = const [];
@@ -61,6 +67,8 @@ class _PiRelayAppState extends State<PiRelayApp> {
   bool _isLoadingOlderMessages = false;
   bool _isSubmittingPrompt = false;
   bool _isRestoringPairing = false;
+  bool _isSessionStreamClosed = false;
+  StreamSubscription<SessionStreamEvent>? _sessionStreamSubscription;
 
   @override
   void initState() {
@@ -103,6 +111,12 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _isRestoringPairing = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _sessionStreamSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -277,7 +291,10 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _hasOlderMessages = false;
       _isLoadingOlderMessages = false;
       _isSubmittingPrompt = false;
+      _isSessionStreamClosed = false;
     });
+
+    await _sessionStreamSubscription?.cancel();
 
     try {
       final snapshot = await widget.sessionSnapshotService.fetchSnapshot(
@@ -296,6 +313,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _olderMessagesCursor = snapshot.olderMessagesCursor;
         _hasOlderMessages = snapshot.hasOlderMessages;
       });
+      _watchSessionStream(session.id, pairingResult);
     } on Exception catch (error) {
       if (!mounted || _selectedSession?.id != session.id) return;
       setState(() {
@@ -307,6 +325,56 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _hasOlderMessages = false;
       });
     }
+  }
+
+  void _watchSessionStream(String sessionId, PairingResult pairingResult) {
+    _sessionStreamSubscription = widget.sessionSnapshotService
+        .watchSession(
+          baseUrl: pairingResult.baseUrl,
+          token: pairingResult.token,
+          sessionId: sessionId,
+        )
+        .listen(
+          (event) => _receiveSessionStreamEvent(sessionId, event),
+          onError: (Object error) => _receiveSessionStreamError(
+            sessionId,
+            error,
+          ),
+        );
+  }
+
+  void _receiveSessionStreamEvent(
+    String sessionId,
+    SessionStreamEvent event,
+  ) {
+    if (!mounted || _selectedSession?.id != sessionId) return;
+    final model = _streamReducer.reduce(
+      SessionStreamModel(
+        session: _selectedSession,
+        messages: _transcriptMessages,
+        olderMessagesCursor: _olderMessagesCursor,
+        hasOlderMessages: _hasOlderMessages,
+        isClosed: _isSessionStreamClosed,
+        lastErrorMessage: _promptErrorText,
+      ),
+      event,
+      now: DateTime.now().toUtc(),
+    );
+    setState(() {
+      _selectedSession = model.session ?? _selectedSession;
+      _transcriptMessages = model.messages;
+      _olderMessagesCursor = model.olderMessagesCursor;
+      _hasOlderMessages = model.hasOlderMessages;
+      _isSessionStreamClosed = model.isClosed;
+      _promptErrorText = model.lastErrorMessage;
+    });
+  }
+
+  void _receiveSessionStreamError(String sessionId, Object error) {
+    if (!mounted || _selectedSession?.id != sessionId) return;
+    setState(() {
+      _promptErrorText = error.toString();
+    });
   }
 
   Future<void> _loadOlderMessages() async {
@@ -391,6 +459,8 @@ class _PiRelayAppState extends State<PiRelayApp> {
   }
 
   void _closeConversation() {
+    _sessionStreamSubscription?.cancel();
+    _sessionStreamSubscription = null;
     setState(() {
       _selectedSession = null;
       _transcriptMessages = const [];
@@ -401,10 +471,13 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _hasOlderMessages = false;
       _isLoadingOlderMessages = false;
       _isSubmittingPrompt = false;
+      _isSessionStreamClosed = false;
     });
   }
 
   void _closeSessions() {
+    _sessionStreamSubscription?.cancel();
+    _sessionStreamSubscription = null;
     setState(() {
       _selectedProject = null;
       _sessions = const [];
@@ -419,6 +492,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _hasOlderMessages = false;
       _isLoadingOlderMessages = false;
       _isSubmittingPrompt = false;
+      _isSessionStreamClosed = false;
     });
   }
 }
