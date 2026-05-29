@@ -18,6 +18,7 @@ void main() {
           errorText: null,
           onBack: () {},
           onRefresh: () async {},
+          onSessionSelected: (_) {},
         ),
       ),
     );
@@ -47,6 +48,7 @@ void main() {
           errorText: null,
           onBack: () {},
           onRefresh: () async {},
+          onSessionSelected: (_) {},
         ),
       ),
     );
@@ -54,6 +56,40 @@ void main() {
     expect(find.byKey(const Key('session-name-sess_1')), findsOneWidget);
     expect(find.text('Refactor auth module'), findsOneWidget);
     expect(find.text('42 messages · active'), findsOneWidget);
+  });
+
+  testWidgets('selects a session', (tester) async {
+    RemoteSession? selectedSession;
+    final session = RemoteSession(
+      id: 'sess_1',
+      piSessionId: 'pi_sess_1',
+      projectId: 'proj_1',
+      name: 'Refactor auth module',
+      path: '/repo/session.jsonl',
+      updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+      messageCount: 42,
+      isActive: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionsPage(
+          project: project,
+          sessions: [session],
+          isLoading: false,
+          errorText: null,
+          onBack: () {},
+          onRefresh: () async {},
+          onSessionSelected: (session) {
+            selectedSession = session;
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Refactor auth module'));
+
+    expect(selectedSession?.id, 'sess_1');
   });
 
   testWidgets('refreshes the session list', (tester) async {
@@ -81,6 +117,7 @@ void main() {
           onRefresh: () async {
             refreshCount += 1;
           },
+          onSessionSelected: (_) {},
         ),
       ),
     );
@@ -102,6 +139,7 @@ void main() {
           errorText: 'session fetch failed',
           onBack: () {},
           onRefresh: () async {},
+          onSessionSelected: (_) {},
         ),
       ),
     );

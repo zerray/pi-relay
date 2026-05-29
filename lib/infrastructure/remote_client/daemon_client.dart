@@ -4,6 +4,7 @@ import 'dart:io';
 import '../../domain/pairing/pairing_link.dart';
 import '../../domain/projects/remote_project.dart';
 import '../../domain/sessions/remote_session.dart';
+import '../../domain/sessions/session_snapshot.dart';
 
 class PairClaimResult {
   const PairClaimResult({
@@ -103,6 +104,26 @@ class DaemonClient {
       }
       return RemoteSession.fromJson(sessionJson);
     }).toList(growable: false);
+  }
+
+  Future<SessionSnapshot> fetchSessionSnapshot({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required int messageLimit,
+  }) async {
+    final uri = baseUrl
+        .resolve('/v1/sessions/${Uri.encodeComponent(sessionId)}')
+        .replace(
+      queryParameters: {'messageLimit': messageLimit.toString()},
+    );
+    final json = await _sendJson(
+      method: 'GET',
+      uri: uri,
+      bearerToken: token,
+    );
+
+    return SessionSnapshot.fromJson(json);
   }
 
   Future<Map<String, Object?>> _sendJson({

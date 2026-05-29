@@ -11,6 +11,7 @@ class SessionsPage extends StatelessWidget {
     required this.errorText,
     required this.onBack,
     required this.onRefresh,
+    required this.onSessionSelected,
     super.key,
   });
 
@@ -20,6 +21,7 @@ class SessionsPage extends StatelessWidget {
   final String? errorText;
   final VoidCallback onBack;
   final Future<void> Function() onRefresh;
+  final ValueChanged<RemoteSession> onSessionSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +108,7 @@ class SessionsPage extends StatelessWidget {
           subtitle: Text(
             '${session.messageCount} messages · ${session.isActive ? 'active' : 'inactive'}',
           ),
+          onTap: () => onSessionSelected(session),
         );
       },
     );

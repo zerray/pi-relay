@@ -7,8 +7,11 @@ import 'package:pi_relay/application/pairing/pairing_service.dart';
 import 'package:pi_relay/application/pairing/pairing_store.dart';
 import 'package:pi_relay/application/projects/project_list_service.dart';
 import 'package:pi_relay/application/sessions/session_list_service.dart';
+import 'package:pi_relay/application/sessions/session_snapshot_service.dart';
 import 'package:pi_relay/domain/projects/remote_project.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
+import 'package:pi_relay/domain/sessions/session_snapshot.dart';
+import 'package:pi_relay/domain/transcript/transcript_message.dart';
 
 void main() {
   testWidgets('restores saved pairing and opens the project list',
@@ -105,6 +108,67 @@ void main() {
 
     expect(find.text('Refactor auth module'), findsOneWidget);
     expect(find.text('42 messages · active'), findsOneWidget);
+  });
+
+  testWidgets('opens a session and displays its transcript snapshot',
+      (tester) async {
+    final session = RemoteSession(
+      id: 'sess_1',
+      piSessionId: 'pi_sess_1',
+      projectId: 'proj_1',
+      name: 'Refactor auth module',
+      path: '/repo/session.jsonl',
+      updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+      messageCount: 42,
+      isActive: true,
+    );
+    final snapshotService = _FakeSessionSnapshotService(
+      snapshot: SessionSnapshot(
+        session: session,
+        messages: [
+          TranscriptMessage(
+            id: 'msg_1',
+            role: 'user',
+            text: 'Explain this project',
+            createdAt: DateTime.utc(2026, 5, 9, 9, 46),
+            isStreaming: false,
+          ),
+          TranscriptMessage(
+            id: 'msg_2',
+            role: 'assistant',
+            text: 'It is a Flutter client.',
+            createdAt: DateTime.utc(2026, 5, 9, 9, 47),
+            isStreaming: false,
+          ),
+        ],
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+        isStreaming: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(sessions: [session]),
+        sessionSnapshotService: snapshotService,
+        pairingStore: _FakePairingStore(),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('pi-relay'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refactor auth module'));
+    await tester.pumpAndSettle();
+
+    expect(snapshotService.fetchedBaseUrl.toString(), 'https://daemon.example');
+    expect(snapshotService.fetchedToken, 'token_1');
+    expect(snapshotService.fetchedSessionId, 'sess_1');
+    expect(snapshotService.fetchedMessageLimit, 50);
+    expect(find.text('Explain this project'), findsOneWidget);
+    expect(find.text('It is a Flutter client.'), findsOneWidget);
   });
 
   testWidgets('refreshes projects from the paired daemon', (tester) async {
@@ -283,6 +347,31 @@ class _FakeProjectListService implements ProjectListService {
     fetchedBaseUrl = baseUrl;
     fetchedToken = token;
     return projects;
+  }
+}
+
+class _FakeSessionSnapshotService implements SessionSnapshotService {
+  _FakeSessionSnapshotService({required this.snapshot});
+
+  final SessionSnapshot snapshot;
+
+  Uri? fetchedBaseUrl;
+  String? fetchedToken;
+  String? fetchedSessionId;
+  int? fetchedMessageLimit;
+
+  @override
+  Future<SessionSnapshot> fetchSnapshot({
+    required Uri baseUrl,
+    required String token,
+    required String sessionId,
+    required int messageLimit,
+  }) async {
+    fetchedBaseUrl = baseUrl;
+    fetchedToken = token;
+    fetchedSessionId = sessionId;
+    fetchedMessageLimit = messageLimit;
+    return snapshot;
   }
 }
 

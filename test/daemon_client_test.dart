@@ -107,6 +107,57 @@ void main() {
     expect(sessions.single.name, 'Refactor auth module');
   });
 
+  test('fetches session snapshot with bearer token and message limit',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    _serve(server, (request) async {
+      expect(request.method, 'GET');
+      expect(request.uri.path, '/v1/sessions/sess_1');
+      expect(request.uri.queryParameters['messageLimit'], '50');
+      expect(request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer token_1');
+      request.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'session': {
+            'id': 'sess_1',
+            'piSessionId': 'pi_sess_1',
+            'projectId': 'proj_1',
+            'name': 'Refactor auth module',
+            'path': '/repo/session.jsonl',
+            'updatedAt': '2026-05-09T09:47:00.000Z',
+            'messageCount': 42,
+            'isActive': true,
+          },
+          'messages': [
+            {
+              'id': 'msg_1',
+              'role': 'user',
+              'text': 'Explain this project',
+              'createdAt': '2026-05-09T09:46:00.000Z',
+              'isStreaming': false,
+              'content': [],
+            },
+          ],
+          'olderMessagesCursor': null,
+          'hasOlderMessages': false,
+          'isStreaming': false,
+        }));
+    });
+
+    final client = DaemonClient();
+    final snapshot = await client.fetchSessionSnapshot(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      token: 'token_1',
+      sessionId: 'sess_1',
+      messageLimit: 50,
+    );
+
+    expect(snapshot.session.id, 'sess_1');
+    expect(snapshot.messages.single.text, 'Explain this project');
+  });
+
   test('throws daemon client exception for non-success responses', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(server.close);

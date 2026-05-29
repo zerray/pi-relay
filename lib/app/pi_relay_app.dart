@@ -6,12 +6,16 @@ import '../application/pairing/pairing_store.dart';
 import '../application/projects/daemon_project_list_service.dart';
 import '../application/projects/project_list_service.dart';
 import '../application/sessions/daemon_session_list_service.dart';
+import '../application/sessions/daemon_session_snapshot_service.dart';
 import '../application/sessions/session_list_service.dart';
+import '../application/sessions/session_snapshot_service.dart';
 import '../domain/projects/remote_project.dart';
 import '../infrastructure/secure_store/default_pairing_store.dart';
 import '../domain/sessions/remote_session.dart';
+import '../domain/transcript/transcript_message.dart';
 import '../presentation/pairing/pairing_start_page.dart';
 import '../presentation/projects/projects_page.dart';
+import '../presentation/sessions/session_conversation_page.dart';
 import '../presentation/sessions/sessions_page.dart';
 
 class PiRelayApp extends StatefulWidget {
@@ -19,17 +23,21 @@ class PiRelayApp extends StatefulWidget {
     PairingService? pairingService,
     ProjectListService? projectListService,
     SessionListService? sessionListService,
+    SessionSnapshotService? sessionSnapshotService,
     PairingStore? pairingStore,
     this.platform,
     super.key,
   })  : pairingService = pairingService ?? DaemonPairingService(),
         projectListService = projectListService ?? DaemonProjectListService(),
         sessionListService = sessionListService ?? DaemonSessionListService(),
+        sessionSnapshotService =
+            sessionSnapshotService ?? DaemonSessionSnapshotService(),
         pairingStore = pairingStore ?? createDefaultPairingStore();
 
   final PairingService pairingService;
   final ProjectListService projectListService;
   final SessionListService sessionListService;
+  final SessionSnapshotService sessionSnapshotService;
   final PairingStore? pairingStore;
   final TargetPlatform? platform;
 
@@ -43,6 +51,10 @@ class _PiRelayAppState extends State<PiRelayApp> {
   List<RemoteSession> _sessions = const [];
   bool _isLoadingSessions = false;
   String? _sessionErrorText;
+  RemoteSession? _selectedSession;
+  List<TranscriptMessage> _transcriptMessages = const [];
+  bool _isLoadingSnapshot = false;
+  String? _snapshotErrorText;
   bool _isRestoringPairing = false;
 
   @override
@@ -114,6 +126,17 @@ class _PiRelayAppState extends State<PiRelayApp> {
       return PairingStartPage(onPairingPayloadSubmitted: _pair);
     }
 
+    final selectedSession = _selectedSession;
+    if (selectedSession != null) {
+      return SessionConversationPage(
+        session: selectedSession,
+        messages: _transcriptMessages,
+        isLoading: _isLoadingSnapshot,
+        errorText: _snapshotErrorText,
+        onBack: _closeConversation,
+      );
+    }
+
     final selectedProject = _selectedProject;
     if (selectedProject != null) {
       return SessionsPage(
@@ -123,6 +146,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         errorText: _sessionErrorText,
         onBack: _closeSessions,
         onRefresh: _refreshSessions,
+        onSessionSelected: _openSession,
       );
     }
 
@@ -228,12 +252,60 @@ class _PiRelayAppState extends State<PiRelayApp> {
     }
   }
 
+  Future<void> _openSession(RemoteSession session) async {
+    final pairingResult = _pairingResult;
+    if (pairingResult == null) return;
+
+    setState(() {
+      _selectedSession = session;
+      _transcriptMessages = const [];
+      _isLoadingSnapshot = true;
+      _snapshotErrorText = null;
+    });
+
+    try {
+      final snapshot = await widget.sessionSnapshotService.fetchSnapshot(
+        baseUrl: pairingResult.baseUrl,
+        token: pairingResult.token,
+        sessionId: session.id,
+        messageLimit: 50,
+      );
+      if (!mounted || _selectedSession?.id != session.id) return;
+      setState(() {
+        _selectedSession = snapshot.session;
+        _transcriptMessages = snapshot.messages;
+        _isLoadingSnapshot = false;
+        _snapshotErrorText = null;
+      });
+    } on Exception catch (error) {
+      if (!mounted || _selectedSession?.id != session.id) return;
+      setState(() {
+        _transcriptMessages = const [];
+        _isLoadingSnapshot = false;
+        _snapshotErrorText = error.toString();
+      });
+    }
+  }
+
+  void _closeConversation() {
+    setState(() {
+      _selectedSession = null;
+      _transcriptMessages = const [];
+      _isLoadingSnapshot = false;
+      _snapshotErrorText = null;
+    });
+  }
+
   void _closeSessions() {
     setState(() {
       _selectedProject = null;
       _sessions = const [];
       _isLoadingSessions = false;
       _sessionErrorText = null;
+      _selectedSession = null;
+      _transcriptMessages = const [];
+      _isLoadingSnapshot = false;
+      _snapshotErrorText = null;
     });
   }
 }
