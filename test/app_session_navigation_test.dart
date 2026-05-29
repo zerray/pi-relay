@@ -68,6 +68,29 @@ void main() {
     expect(pairingStore.savedPairing?.token, 'token_1');
   });
 
+  testWidgets('unpairs the selected daemon from project list', (tester) async {
+    final pairingStore = _FakePairingStore();
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(),
+        pairingStore: pairingStore,
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('daemon.example'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unpair'));
+    await tester.pumpAndSettle();
+
+    expect(pairingStore.cleared, isTrue);
+    expect(find.text('输入配对字符串'), findsOneWidget);
+    expect(find.text('pi-relay'), findsNothing);
+  });
+
   testWidgets('opens a project and displays its sessions', (tester) async {
     final sessionsCompleter = Completer<List<RemoteSession>>();
     final sessionListService = _FakeSessionListService(

@@ -97,7 +97,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.submittedPayload, 'abc123');
-    expect(find.text('macbook-pro'), findsOneWidget);
+    expect(find.text('daemon.example'), findsOneWidget);
     expect(find.text('pi-relay'), findsOneWidget);
     expect(find.text('/Users/zerray/gitclone/pi-relay'), findsOneWidget);
   });

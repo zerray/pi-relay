@@ -177,8 +177,10 @@ class _PiRelayAppState extends State<PiRelayApp> {
 
     return ProjectsPage(
       daemonName: pairingResult.daemonName,
+      daemonBaseUrl: pairingResult.baseUrl,
       projects: pairingResult.projects,
       onProjectSelected: _openProject,
+      onUnpair: _unpair,
       onRefresh: _refreshProjects,
     );
   }
@@ -195,6 +197,30 @@ class _PiRelayAppState extends State<PiRelayApp> {
     if (!mounted) return;
     setState(() {
       _pairingResult = result;
+    });
+  }
+
+  Future<void> _unpair() async {
+    await widget.pairingStore?.clear();
+    if (!mounted) return;
+    await _sessionStreamSubscription?.cancel();
+    _sessionStreamSubscription = null;
+    setState(() {
+      _pairingResult = null;
+      _selectedProject = null;
+      _sessions = const [];
+      _isLoadingSessions = false;
+      _sessionErrorText = null;
+      _selectedSession = null;
+      _transcriptMessages = const [];
+      _isLoadingSnapshot = false;
+      _snapshotErrorText = null;
+      _promptErrorText = null;
+      _olderMessagesCursor = null;
+      _hasOlderMessages = false;
+      _isLoadingOlderMessages = false;
+      _isSubmittingPrompt = false;
+      _isSessionStreamClosed = false;
     });
   }
 
