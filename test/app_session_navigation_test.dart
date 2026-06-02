@@ -10,6 +10,7 @@ import 'package:pi_relay/application/sessions/session_list_service.dart';
 import 'package:pi_relay/application/sessions/session_snapshot_service.dart';
 import 'package:pi_relay/domain/projects/remote_project.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
+import 'package:pi_relay/domain/sessions/runtime_status.dart';
 import 'package:pi_relay/domain/sessions/session_snapshot.dart';
 import 'package:pi_relay/domain/sessions/session_stream_event.dart';
 import 'package:pi_relay/domain/transcript/transcript_message.dart';
@@ -247,6 +248,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Transcript message 79'), findsOneWidget);
+  });
+
+  testWidgets('shows runtime status from snapshot and live stream',
+      (tester) async {
+    final session = RemoteSession(
+      id: 'sess_1',
+      piSessionId: 'pi_sess_1',
+      projectId: 'proj_1',
+      name: 'Refactor auth module',
+      path: '/repo/session.jsonl',
+      updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+      messageCount: 42,
+      isActive: true,
+    );
+    final snapshotService = _FakeSessionSnapshotService(
+      snapshot: SessionSnapshot(
+        session: session,
+        messages: const [],
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+        isStreaming: false,
+        runtimeStatus: _runtimeStatus(percent: 28.4, tokens: 272000),
+      ),
+    );
+
+    await tester.pumpWidget(
+      PiRelayApp(
+        pairingService: _FakePairingService(),
+        sessionListService: _FakeSessionListService(sessions: [session]),
+        sessionSnapshotService: snapshotService,
+        pairingStore: _FakePairingStore(),
+        platform: TargetPlatform.macOS,
+      ),
+    );
+    await _pair(tester);
+
+    await tester.tap(find.text('pi-relay'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refactor auth module'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('28.4%/200k'), findsOneWidget);
+
+    snapshotService.addStreamEvent(
+      RuntimeStatusEvent(_runtimeStatus(percent: 32.5, tokens: 65000)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('32.5%/200k'), findsOneWidget);
   });
 
   testWidgets('receives live transcript messages from the session stream',
@@ -558,6 +608,36 @@ void main() {
     expect(find.text('pi-relay'), findsOneWidget);
     expect(find.text('/repo/pi-relay'), findsOneWidget);
   });
+}
+
+RuntimeStatus _runtimeStatus({required double percent, required int tokens}) {
+  return RuntimeStatus(
+    model: const RuntimeModelStatus(
+      provider: 'anthropic',
+      id: 'claude-sonnet-4-5',
+      contextWindow: 200000,
+    ),
+    thinkingLevel: 'medium',
+    usage: const RuntimeUsageStatus(
+      input: 12000,
+      output: 3000,
+      cacheRead: 50000,
+      cacheWrite: 10000,
+      cost: RuntimeCostStatus(
+        input: 0.036,
+        output: 0.045,
+        cacheRead: 0.015,
+        cacheWrite: 0.0375,
+        total: 0.1335,
+      ),
+    ),
+    context: RuntimeContextStatus(
+      tokens: tokens,
+      contextWindow: 200000,
+      percent: percent,
+    ),
+    updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+  );
 }
 
 Future<void> _pair(WidgetTester tester) async {

@@ -14,6 +14,7 @@ import '../application/sessions/session_snapshot_service.dart';
 import '../domain/projects/remote_project.dart';
 import '../infrastructure/secure_store/default_pairing_store.dart';
 import '../domain/sessions/remote_session.dart';
+import '../domain/sessions/runtime_status.dart';
 import '../domain/sessions/session_stream_event.dart';
 import '../domain/sessions/session_stream_reducer.dart';
 import '../domain/transcript/transcript_message.dart';
@@ -68,6 +69,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
   bool _isSubmittingPrompt = false;
   bool _isRestoringPairing = false;
   bool _isSessionStreamClosed = false;
+  RuntimeStatus? _runtimeStatus;
   StreamSubscription<SessionStreamEvent>? _sessionStreamSubscription;
 
   @override
@@ -156,6 +158,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         hasOlderMessages: _hasOlderMessages,
         isLoadingOlder: _isLoadingOlderMessages,
         isSubmittingPrompt: _isSubmittingPrompt,
+        runtimeStatus: _runtimeStatus,
         onLoadOlder: _loadOlderMessages,
         onPromptSubmitted: _sendPrompt,
         onBack: _closeConversation,
@@ -222,6 +225,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _isLoadingOlderMessages = false;
       _isSubmittingPrompt = false;
       _isSessionStreamClosed = false;
+      _runtimeStatus = null;
     });
   }
 
@@ -319,6 +323,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _isLoadingOlderMessages = false;
       _isSubmittingPrompt = false;
       _isSessionStreamClosed = false;
+      _runtimeStatus = null;
     });
 
     await _sessionStreamSubscription?.cancel();
@@ -339,6 +344,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _promptErrorText = null;
         _olderMessagesCursor = snapshot.olderMessagesCursor;
         _hasOlderMessages = snapshot.hasOlderMessages;
+        _runtimeStatus = snapshot.runtimeStatus;
       });
       _watchSessionStream(session.id, pairingResult);
     } on Exception catch (error) {
@@ -350,6 +356,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         _promptErrorText = null;
         _olderMessagesCursor = null;
         _hasOlderMessages = false;
+        _runtimeStatus = null;
       });
     }
   }
@@ -383,6 +390,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
         hasOlderMessages: _hasOlderMessages,
         isClosed: _isSessionStreamClosed,
         lastErrorMessage: _promptErrorText,
+        runtimeStatus: _runtimeStatus,
       ),
       event,
       now: DateTime.now().toUtc(),
@@ -394,6 +402,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _hasOlderMessages = model.hasOlderMessages;
       _isSessionStreamClosed = model.isClosed;
       _promptErrorText = model.lastErrorMessage;
+      _runtimeStatus = model.runtimeStatus;
     });
   }
 
@@ -499,6 +508,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _isLoadingOlderMessages = false;
       _isSubmittingPrompt = false;
       _isSessionStreamClosed = false;
+      _runtimeStatus = null;
     });
   }
 
@@ -520,6 +530,7 @@ class _PiRelayAppState extends State<PiRelayApp> {
       _isLoadingOlderMessages = false;
       _isSubmittingPrompt = false;
       _isSessionStreamClosed = false;
+      _runtimeStatus = null;
     });
   }
 }

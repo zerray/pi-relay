@@ -1,5 +1,6 @@
 import '../transcript/transcript_message.dart';
 import 'remote_session.dart';
+import 'runtime_status.dart';
 import 'session_stream_event.dart';
 
 class SessionStreamModel {
@@ -11,6 +12,7 @@ class SessionStreamModel {
     this.isStreaming = false,
     this.isClosed = false,
     this.lastErrorMessage,
+    this.runtimeStatus,
   });
 
   final RemoteSession? session;
@@ -20,6 +22,7 @@ class SessionStreamModel {
   final bool isStreaming;
   final bool isClosed;
   final String? lastErrorMessage;
+  final RuntimeStatus? runtimeStatus;
 
   SessionStreamModel copyWith({
     RemoteSession? session,
@@ -32,6 +35,8 @@ class SessionStreamModel {
     bool? isClosed,
     String? lastErrorMessage,
     bool clearLastErrorMessage = false,
+    RuntimeStatus? runtimeStatus,
+    bool clearRuntimeStatus = false,
   }) {
     return SessionStreamModel(
       session: clearSession ? null : session ?? this.session,
@@ -45,6 +50,8 @@ class SessionStreamModel {
       lastErrorMessage: clearLastErrorMessage
           ? null
           : lastErrorMessage ?? this.lastErrorMessage,
+      runtimeStatus:
+          clearRuntimeStatus ? null : runtimeStatus ?? this.runtimeStatus,
     );
   }
 }
@@ -72,6 +79,8 @@ class SessionStreamReducer {
           hasOlderMessages: state.hasOlderMessages,
           isStreaming: state.isStreaming,
           isClosed: false,
+          runtimeStatus: state.runtimeStatus,
+          clearRuntimeStatus: state.runtimeStatus == null,
           clearLastErrorMessage: true,
         ),
       AssistantDeltaEvent(:final itemId, :final text) => model.copyWith(
@@ -112,6 +121,10 @@ class SessionStreamReducer {
           messages: _finishStreamingMessages(model.messages),
           isStreaming: false,
           isClosed: true,
+        ),
+      RuntimeStatusEvent(:final status) => model.copyWith(
+          runtimeStatus: status,
+          clearRuntimeStatus: status == null,
         ),
       SessionStreamErrorEvent(:final message) => model.copyWith(
           lastErrorMessage: message,

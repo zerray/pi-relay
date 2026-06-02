@@ -1,5 +1,6 @@
 import '../transcript/transcript_message.dart';
 import 'remote_session.dart';
+import 'runtime_status.dart';
 
 class SessionSnapshot {
   const SessionSnapshot({
@@ -8,6 +9,7 @@ class SessionSnapshot {
     required this.olderMessagesCursor,
     required this.hasOlderMessages,
     required this.isStreaming,
+    this.runtimeStatus,
   });
 
   final RemoteSession session;
@@ -15,6 +17,7 @@ class SessionSnapshot {
   final String? olderMessagesCursor;
   final bool hasOlderMessages;
   final bool isStreaming;
+  final RuntimeStatus? runtimeStatus;
 
   factory SessionSnapshot.fromJson(Map<String, Object?> json) {
     final sessionJson = json['session'];
@@ -22,6 +25,7 @@ class SessionSnapshot {
     final olderMessagesCursor = json['olderMessagesCursor'];
     final hasOlderMessages = json['hasOlderMessages'];
     final isStreaming = json['isStreaming'];
+    final runtimeStatusJson = json['runtimeStatus'];
 
     if (sessionJson is! Map<String, Object?> ||
         messagesJson is! List ||
@@ -47,6 +51,14 @@ class SessionSnapshot {
       olderMessagesCursor: olderMessagesCursor as String?,
       hasOlderMessages: hasOlderMessages,
       isStreaming: isStreaming,
+      runtimeStatus: runtimeStatusJson == null
+          ? null
+          : RuntimeStatus.fromJson(_object(runtimeStatusJson, 'runtimeStatus')),
     );
   }
+}
+
+Map<String, Object?> _object(Object? value, String field) {
+  if (value is Map<String, Object?>) return value;
+  throw FormatException('Session snapshot field $field is not an object.');
 }

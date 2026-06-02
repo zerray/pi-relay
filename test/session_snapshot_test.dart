@@ -35,6 +35,29 @@ void main() {
       'olderMessagesCursor': 'cursor_1',
       'hasOlderMessages': true,
       'isStreaming': false,
+      'runtimeStatus': {
+        'model': {'provider': 'anthropic', 'id': 'claude-sonnet-4-5'},
+        'thinkingLevel': 'medium',
+        'usage': {
+          'input': 12000,
+          'output': 3000,
+          'cacheRead': 50000,
+          'cacheWrite': 10000,
+          'cost': {
+            'input': 0.036,
+            'output': 0.045,
+            'cacheRead': 0.015,
+            'cacheWrite': 0.0375,
+            'total': 0.1335,
+          },
+        },
+        'context': {
+          'tokens': 65000,
+          'contextWindow': 200000,
+          'percent': 32.5,
+        },
+        'updatedAt': '2026-05-09T09:47:00.000Z',
+      },
     });
 
     expect(snapshot.session.id, 'sess_1');
@@ -45,5 +68,6 @@ void main() {
     expect(snapshot.olderMessagesCursor, 'cursor_1');
     expect(snapshot.hasOlderMessages, isTrue);
     expect(snapshot.isStreaming, isFalse);
+    expect(snapshot.runtimeStatus?.context?.percent, 32.5);
   });
 }

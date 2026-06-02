@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pi_relay/domain/sessions/remote_session.dart';
+import 'package:pi_relay/domain/sessions/runtime_status.dart';
 import 'package:pi_relay/domain/transcript/transcript_message.dart';
 import 'package:pi_relay/presentation/sessions/session_conversation_page.dart';
 
@@ -66,6 +67,31 @@ void main() {
     expect(find.text('assistant'), findsNothing);
     expect(find.text('It is a Flutter client.'), findsOneWidget);
     expect(find.text('Talk to Pi'), findsOneWidget);
+  });
+
+  testWidgets('shows runtime context subtitle and detail sheet',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SessionConversationPage(
+          session: session,
+          messages: const [],
+          isLoading: false,
+          errorText: null,
+          runtimeStatus: runtimeStatus(),
+          onBack: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('32.5%/200k'), findsOneWidget);
+
+    await tester.tap(find.text('32.5%/200k'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Runtime status'), findsOneWidget);
+    expect(find.textContaining('Model: Claude Sonnet 4.5'), findsOneWidget);
+    expect(find.textContaining('Cost: \$0.1335'), findsOneWidget);
   });
 
   testWidgets('renders assistant markdown code blocks in chat style',
@@ -363,6 +389,37 @@ void main() {
 
     expect(find.text('snapshot fetch failed'), findsOneWidget);
   });
+}
+
+RuntimeStatus runtimeStatus() {
+  return RuntimeStatus(
+    model: const RuntimeModelStatus(
+      provider: 'anthropic',
+      id: 'claude-sonnet-4-5',
+      name: 'Claude Sonnet 4.5',
+      contextWindow: 200000,
+    ),
+    thinkingLevel: 'medium',
+    usage: const RuntimeUsageStatus(
+      input: 12000,
+      output: 3000,
+      cacheRead: 50000,
+      cacheWrite: 10000,
+      cost: RuntimeCostStatus(
+        input: 0.036,
+        output: 0.045,
+        cacheRead: 0.015,
+        cacheWrite: 0.0375,
+        total: 0.1335,
+      ),
+    ),
+    context: const RuntimeContextStatus(
+      tokens: 65000,
+      contextWindow: 200000,
+      percent: 32.5,
+    ),
+    updatedAt: DateTime.utc(2026, 5, 9, 9, 47),
+  );
 }
 
 List<TranscriptMessage> _variableHeightMessages() {

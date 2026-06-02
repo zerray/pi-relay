@@ -1,5 +1,6 @@
 import '../transcript/transcript_message.dart';
 import 'remote_session.dart';
+import 'runtime_status.dart';
 
 sealed class SessionStreamEvent {
   const SessionStreamEvent();
@@ -34,6 +35,11 @@ sealed class SessionStreamEvent {
           TranscriptMessage.fromJson(_object(json['message'], 'message')),
         ),
       'turn_end' || 'agent_done' || 'agentDone' => const TurnFinishedEvent(),
+      'runtime_status' || 'runtimeStatus' => RuntimeStatusEvent(
+          _nullableObject(json['status']) == null
+              ? null
+              : RuntimeStatus.fromJson(_nullableObject(json['status'])!),
+        ),
       'session_closed' => const SessionClosedEvent(),
       'error' => SessionStreamErrorEvent(_string(json['message'], 'message')),
       _ => const IgnoredSessionStreamEvent(),
@@ -88,6 +94,12 @@ class TurnFinishedEvent extends SessionStreamEvent {
   const TurnFinishedEvent();
 }
 
+class RuntimeStatusEvent extends SessionStreamEvent {
+  const RuntimeStatusEvent(this.status);
+
+  final RuntimeStatus? status;
+}
+
 class SessionClosedEvent extends SessionStreamEvent {
   const SessionClosedEvent();
 }
@@ -109,6 +121,7 @@ class SessionStreamState {
     required this.isStreaming,
     this.session,
     this.olderMessagesCursor,
+    this.runtimeStatus,
   });
 
   final RemoteSession? session;
@@ -116,6 +129,7 @@ class SessionStreamState {
   final String? olderMessagesCursor;
   final bool hasOlderMessages;
   final bool isStreaming;
+  final RuntimeStatus? runtimeStatus;
 
   factory SessionStreamState.fromJson(Map<String, Object?> json) {
     final messagesJson = json['messages'];
@@ -136,6 +150,7 @@ class SessionStreamState {
     final olderMessagesCursor = json['olderMessagesCursor'];
     final hasOlderMessages = json['hasOlderMessages'];
     final isStreaming = json['isStreaming'];
+    final runtimeStatusJson = json['runtimeStatus'];
     if (olderMessagesCursor != null && olderMessagesCursor is! String ||
         hasOlderMessages is! bool ||
         isStreaming is! bool) {
@@ -153,6 +168,9 @@ class SessionStreamState {
       olderMessagesCursor: olderMessagesCursor as String?,
       hasOlderMessages: hasOlderMessages,
       isStreaming: isStreaming,
+      runtimeStatus: runtimeStatusJson == null
+          ? null
+          : RuntimeStatus.fromJson(_object(runtimeStatusJson, 'runtimeStatus')),
     );
   }
 }
@@ -228,6 +246,12 @@ class IgnoredTranscriptMessagePatch extends TranscriptMessagePatch {
 Map<String, Object?> _object(Object? value, String field) {
   if (value is Map<String, Object?>) return value;
   throw FormatException('Session stream event field $field is not an object.');
+}
+
+Map<String, Object?>? _nullableObject(Object? value) {
+  if (value == null) return null;
+  if (value is Map<String, Object?>) return value;
+  throw const FormatException('Session stream event field is not an object.');
 }
 
 String _string(Object? value, String field) {

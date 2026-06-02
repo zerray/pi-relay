@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/sessions/remote_session.dart';
+import '../../domain/sessions/runtime_status.dart';
 import '../../domain/transcript/transcript_message.dart';
 
 class SessionConversationPage extends StatefulWidget {
@@ -14,6 +15,7 @@ class SessionConversationPage extends StatefulWidget {
     this.isLoadingOlder = false,
     this.isSubmittingPrompt = false,
     this.promptErrorText,
+    this.runtimeStatus,
     this.onLoadOlder,
     this.onPromptSubmitted,
     super.key,
@@ -28,6 +30,7 @@ class SessionConversationPage extends StatefulWidget {
   final bool isLoadingOlder;
   final bool isSubmittingPrompt;
   final String? promptErrorText;
+  final RuntimeStatus? runtimeStatus;
   final Future<void> Function()? onLoadOlder;
   final Future<void> Function(String text)? onPromptSubmitted;
 
@@ -77,7 +80,13 @@ class _SessionConversationPageState extends State<SessionConversationPage> {
           children: [
             _SessionHeader(
               title: widget.session.name,
-              subtitle: 'Remote control',
+              subtitle: _RuntimeStatusFormatter.contextUsageSubtitle(
+                    widget.runtimeStatus,
+                  ) ??
+                  'Remote control',
+              runtimeStatusDetail: _RuntimeStatusFormatter.detail(
+                widget.runtimeStatus,
+              ),
               onBack: widget.onBack,
             ),
             Expanded(child: _buildBody(context)),
@@ -232,11 +241,13 @@ class _SessionHeader extends StatelessWidget {
   const _SessionHeader({
     required this.title,
     required this.subtitle,
+    required this.runtimeStatusDetail,
     required this.onBack,
   });
 
   final String title;
   final String subtitle;
+  final _RuntimeStatusDetail? runtimeStatusDetail;
   final VoidCallback onBack;
 
   @override
@@ -259,27 +270,40 @@ class _SessionHeader extends StatelessWidget {
             onPressed: onBack,
           ),
           Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: runtimeStatusDetail == null
+                  ? null
+                  : () => _showRuntimeStatusDetail(
+                        context,
+                        runtimeStatusDetail!,
                       ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
                 ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ],
+              ),
             ),
           ),
           const SizedBox(width: 48, height: 48),
@@ -287,6 +311,120 @@ class _SessionHeader extends StatelessWidget {
       ),
     );
   }
+
+  void _showRuntimeStatusDetail(
+    BuildContext context,
+    _RuntimeStatusDetail detail,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  detail.title,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  detail.subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                SelectableText(
+                  detail.body,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        height: 1.45,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RuntimeStatusDetail {
+  const _RuntimeStatusDetail({
+    required this.title,
+    required this.subtitle,
+    required this.body,
+  });
+
+  final String title;
+  final String subtitle;
+  final String body;
+}
+
+class _RuntimeStatusFormatter {
+  const _RuntimeStatusFormatter._();
+
+  static String? contextUsageSubtitle(RuntimeStatus? status) {
+    final context = status?.context;
+    if (context == null) return null;
+    final percentText = context.percent == null
+        ? '—'
+        : '${context.percent!.toStringAsFixed(1)}%';
+    return '$percentText/${_compactTokenCount(context.contextWindow)}';
+  }
+
+  static _RuntimeStatusDetail? detail(RuntimeStatus? status) {
+    if (status == null) return null;
+    final modelName = status.model?.displayName ?? 'Unknown model';
+    final usage = status.usage;
+    final body = [
+      _detailContextText(status.context),
+      'Model: $modelName',
+      'Thinking: ${status.thinkingLevel ?? 'unknown'}',
+      'Usage: ${_compactTokenCount(usage.input)} input, ${_compactTokenCount(usage.output)} output, ${_compactTokenCount(usage.cacheRead)} cache read, ${_compactTokenCount(usage.cacheWrite)} cache write',
+      'Cost: ${_costText(usage.cost.total)}',
+    ].join('\n');
+    return _RuntimeStatusDetail(
+      title: 'Runtime status',
+      subtitle: modelName,
+      body: body,
+    );
+  }
+
+  static String _detailContextText(RuntimeContextStatus? context) {
+    if (context == null) return 'Context: unavailable';
+    final percentText = context.percent == null
+        ? '—'
+        : '${context.percent!.toStringAsFixed(1)}%';
+    final tokensText =
+        context.tokens == null ? '—' : _compactTokenCount(context.tokens!);
+    return 'Context: $percentText/$tokensText of ${_compactTokenCount(context.contextWindow)}';
+  }
+
+  static String _compactTokenCount(int value) {
+    if (value >= 1000000) {
+      final millions = value / 1000000;
+      return millions % 1 == 0
+          ? '${millions.toInt()}m'
+          : '${millions.toStringAsFixed(1)}m';
+    }
+    if (value >= 1000) {
+      final thousands = value / 1000;
+      return thousands % 1 == 0
+          ? '${thousands.toInt()}k'
+          : '${thousands.toStringAsFixed(1)}k';
+    }
+    return value.toString();
+  }
+
+  static String _costText(double value) => '\$${value.toStringAsFixed(4)}';
 }
 
 class _PromptErrorRow extends StatelessWidget {
