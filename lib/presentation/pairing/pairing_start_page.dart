@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
+import 'mobile_pairing_scanner_page.dart';
+
 class PairingStartPage extends StatefulWidget {
   const PairingStartPage({
     required this.onPairingPayloadSubmitted,
+    this.scannerBuilder,
     super.key,
   });
 
   final Future<void> Function(String pairingPayload) onPairingPayloadSubmitted;
+  final PairingScannerViewBuilder? scannerBuilder;
 
   @override
   State<PairingStartPage> createState() => _PairingStartPageState();
@@ -75,7 +79,7 @@ class _PairingStartPageState extends State<PairingStartPage> {
                     onPressed: _isPairing
                         ? null
                         : () => isMobile
-                            ? _showScannerUnavailable(context)
+                            ? _handleScanButtonPressed(context)
                             : _handlePairButtonPressed(context),
                     icon: _isPairing
                         ? const SizedBox.square(
@@ -105,10 +109,20 @@ class _PairingStartPageState extends State<PairingStartPage> {
     );
   }
 
-  void _showScannerUnavailable(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('扫码配对将在接入摄像头后启用')),
+  Future<void> _handleScanButtonPressed(BuildContext context) async {
+    final scannerBuilder = widget.scannerBuilder ??
+        (onScanned) => MobilePairingScannerPage(
+              onPairingPayloadScanned: onScanned,
+              onCancel: () => Navigator.of(context).pop(),
+            );
+    final payload = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (routeContext) => scannerBuilder(
+          (payload) => Navigator.of(routeContext).pop(payload),
+        ),
+      ),
     );
+    await _submitPairingPayload(payload);
   }
 
   Future<void> _handlePairButtonPressed(BuildContext context) async {
@@ -116,6 +130,10 @@ class _PairingStartPageState extends State<PairingStartPage> {
       context: context,
       builder: (context) => const _PairingPayloadDialog(),
     );
+    await _submitPairingPayload(payload);
+  }
+
+  Future<void> _submitPairingPayload(String? payload) async {
     if (payload == null || payload.trim().isEmpty) return;
 
     setState(() {

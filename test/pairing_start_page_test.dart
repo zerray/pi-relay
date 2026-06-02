@@ -34,19 +34,35 @@ void main() {
     expect(button.onPressed, isNotNull);
   });
 
-  testWidgets('mobile scan button reports scanner is not connected yet',
-      (tester) async {
+  testWidgets('mobile scan submits scanned pairing payload', (tester) async {
+    String? submittedPayload;
+
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(platform: TargetPlatform.android),
-        home: PairingStartPage(onPairingPayloadSubmitted: (_) async {}),
+        home: PairingStartPage(
+          onPairingPayloadSubmitted: (payload) async {
+            submittedPayload = payload;
+          },
+          scannerBuilder: (onScanned) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => onScanned('  pi-remote://pair?payload=abc  '),
+                child: const Text('Fake scan'),
+              ),
+            ),
+          ),
+        ),
       ),
     );
 
     await tester.tap(find.text('扫码配对'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Fake scan'));
+    await tester.pump();
 
-    expect(find.text('扫码配对将在接入摄像头后启用'), findsOneWidget);
+    expect(submittedPayload, 'pi-remote://pair?payload=abc');
+    expect(find.text('Pi Relay'), findsOneWidget);
   });
 
   testWidgets('shows paste pairing button on desktop', (tester) async {
